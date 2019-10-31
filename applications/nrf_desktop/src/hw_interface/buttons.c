@@ -208,8 +208,52 @@ static void resume(void)
 	}
 }
 
+#ifdef CONFIG_BT_PERIPHERAL
+#include "hid_keymap.h"
+extern struct hid_keymap *hid_keymap_get(u16_t key_id);
+
+bool is_key_mapped(size_t col, size_t row) {
+	uint16_t key_id = KEY_ID(col, row);
+
+	struct hid_keymap *map = hid_keymap_get(key_id);
+
+	if (!map || !map->usage_id) {
+		LOG_INF("Found not mapped key, col: %d, row: %d, time: %d", col, row, k_uptime_get_32());
+		return false;
+	}
+
+	//LOG_INF("Found not mapped key, col: %d, row: %d, usage: %x, time: %d", col, row, map->usage_id, k_uptime_get_32());
+
+	return true;
+}
+
+u32_t find_bit_number(u32_t value) {
+	u32_t count = 0;
+	while (value) {
+		value = value >> 1;
+		++count; 
+	}
+
+	return count;
+}
+
+u32_t cound_enabled_bits(u32_t value) {
+	u32_t count = 0;
+	u32_t tmp;
+	while (value) {
+		tmp = value & 0x1;
+		if (tmp == 1)
+			++count;
+		value = value >> 1;
+	}
+
+	return count;
+}
+#endif
+
 static void scan_fn(struct k_work *work)
 {
+	LOG_INF("Start scan time: %d", k_uptime_get_32());
 	/* Validate state */
 	__ASSERT_NO_MSG((state == STATE_SCANNING) ||
 			(state == STATE_SUSPENDING));
@@ -218,10 +262,14 @@ static void scan_fn(struct k_work *work)
 	u32_t raw_state[COLUMNS];
 	memset(raw_state, 0, sizeof(raw_state));
 
+	u32_t tmp_raw = 0;
+	size_t j = 0;
+	u32_t num = 0;
 	for (size_t i = 0; i < COLUMNS; i++) {
 		int err = set_cols(BIT(i));
 
 		if (!err) {
+			LOG_INF("col scan: %d", i);
 			err = get_rows(&raw_state[i]);
 		}
 
@@ -229,6 +277,31 @@ static void scan_fn(struct k_work *work)
 			LOG_ERR("Cannot scan matrix");
 			goto error;
 		}
+		
+#ifdef CONFIG_BT_PERIPHERAL		
+		if(raw_state[i]) {
+			tmp_raw = raw_state[i];
+			//j = find_bit_number(tmp_raw);
+			//num = cound_enabled_bits(tmp_raw);
+			num = 0;
+			//LOG_INF("Raw state: 0x%x, col: %d", raw_state[i], i);
+			while (tmp_raw) {
+				if ( tmp_raw & 0x1 ) {
+					if (is_key_mapped(i, num) == false ) {
+						LOG_INF("Raw state: 0x%x", raw_state[i]);
+					}
+				}
+				++num;
+				tmp_raw = tmp_raw >> 1;
+			}
+			//LOG_INF("Keys pressed: %d", num);
+		}
+		/*else
+		{
+			j = find_bit_number(tmp_raw);
+			LOG_INF("Mapped key col: %d, row: %d", i, j);
+		}*/
+#endif		
 	}
 
 	/* Avoid draining current between scans */
@@ -239,6 +312,8 @@ static void scan_fn(struct k_work *work)
 
 	/* Prevent ghosting */
 	u32_t cur_state[COLUMNS];
+	u32_t blocked_rows = 0;
+	u32_t raw_row = 0;
 	for (size_t i = 0; i < COLUMNS; i++) {
 		u32_t blocking_mask = 0;
 		for (size_t j = 0; j < COLUMNS; j++) {
@@ -248,10 +323,15 @@ static void scan_fn(struct k_work *work)
 			blocking_mask |= raw_state[j];
 		}
 		blocking_mask ^= raw_state[i];
+		raw_row = raw_state[i];
 		cur_state[i] = raw_state[i];
 		if (!is_power_of_two(raw_state[i])) {
 			/* Power of two means only one bit is set */
+			blocked_rows = cur_state[i] & (~blocking_mask);
 			cur_state[i] &= blocking_mask;
+			if (blocked_rows != 0U) {
+				LOG_INF("Ghost found column: %d, blocked: 0x%x, enabled: 0x%x, raw_state: 0x%x", i, blocked_rows, cur_state[i], raw_row);
+			}
 		}
 	}
 

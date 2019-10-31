@@ -159,7 +159,7 @@ static int hid_keymap_compare(const void *a, const void *b)
 }
 
 /**@brief Translate Key ID to HID Usage ID and target report. */
-static struct hid_keymap *hid_keymap_get(u16_t key_id)
+struct hid_keymap *hid_keymap_get(u16_t key_id)
 {
 	struct hid_keymap key = {
 		.key_id = key_id
