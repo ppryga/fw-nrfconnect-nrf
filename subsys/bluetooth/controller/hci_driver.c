@@ -16,6 +16,15 @@
 #include <ble_controller_hci.h>
 #include "multithreading_lock.h"
 
+#ifndef CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE
+#define CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE
+#endif
+#ifndef CONFIG_BOARD_NRF52840_PCA10056
+#define CONFIG_BOARD_NRF52840_PCA10056
+#endif 
+#include "../../../applications/nrf_desktop/src/modules/debug_gpio.h"
+
+
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_hci_driver
 #include "common/log.h"
@@ -127,7 +136,14 @@ static int hci_driver_send(struct net_buf *buf)
 #endif          /* CONFIG_BT_CONN */
 	case BT_BUF_CMD:
 		BT_DBG("CMD");
+		if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+			DEBUG_CHANGE_OUTPUT(true, DEBUG_PIN2);
+		}
+		LOG_INF("hci driver send !!!!!!!!!!!1");
 		err = cmd_handle(buf);
+		if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+			DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN2);
+		}
 		break;
 	default:
 		BT_DBG("Unknown HCI type %u", type);
@@ -257,11 +273,11 @@ static void recv_thread(void *p1, void *p2, void *p3)
 			/* Wait for a signal from the controller. */
 			k_sem_take(&sem_recv, K_FOREVER);
 		}
-
+		DEBUG_CHANGE_OUTPUT(true, DEBUG_PIN3);
 		received_evt = fetch_and_process_hci_evt(&hci_buffer[0]);
 
 		received_data = fetch_and_process_acl_data(&hci_buffer[0]);
-
+		DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN3);
 		/* Let other threads of same priority run in between. */
 		k_yield();
 	}
@@ -282,6 +298,12 @@ static void signal_thread(void *p1, void *p2, void *p3)
 static int hci_driver_open(void)
 {
 	BT_DBG("Open");
+
+	if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+		DEBUG_INIT();
+		/*DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN2);
+		DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN3);*/
+	}
 
 	k_thread_create(&recv_thread_data, recv_thread_stack,
 			K_THREAD_STACK_SIZEOF(recv_thread_stack), recv_thread,

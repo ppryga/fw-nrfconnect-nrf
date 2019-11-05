@@ -1,0 +1,29 @@
+#
+# Copyright (c) 2019 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
+
+menu "Debug PPI and GPIO settings"
+
+config DESKTOP_DEBUG_PPI_ENABLE
+	bool "Enable debug PPI outputs support"
+	help
+	  Enable support for debug purposes by use of
+	  PPI and GPIOTE
+
+config DESKTOP_DEBUG_GPIO_PINS_ENABLE
+	bool "Enable debug GPIO outputs pins support"
+	help
+	  Enable GPIO pins to be used as debug output
+	  for Logic Analyzer
+
+if DESKTOP_DEBUG_PPI_ENABLE
+
+module = DESKTOP_DEBUG_PPI
+module-str = debug_ppi
+source "subsys/logging/Kconfig.template.log_config"
+
+endif
+
+endmenu

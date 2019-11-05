@@ -96,6 +96,8 @@ enum peer_rpa {
 
 static enum peer_rpa peer_is_rpa[CONFIG_BT_ID_MAX];
 
+extern void enable_radio_on_off_trace();
+
 static int ble_adv_stop(void)
 {
 	int err = bt_le_adv_stop();
@@ -391,6 +393,8 @@ static void init(void)
 	    IS_ENABLED(CONFIG_DESKTOP_POWER_MANAGER_ENABLE)) {
 		k_delayed_work_init(&sp_grace_period_to, sp_grace_period_fn);
 	}
+
+	enable_radio_on_off_trace();
 
 	/* We should not start advertising before ble_bond is ready */
 	state = STATE_OFF;

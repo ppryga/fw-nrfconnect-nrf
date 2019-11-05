@@ -28,6 +28,8 @@
 #include "hid_keymap_def.h"
 #include "hid_report_desc.h"
 
+#include "debug_gpio.h"
+
 #define MODULE hid_state
 #include "module_state_event.h"
 
@@ -623,8 +625,14 @@ static void send_report_mouse(void)
 				event->button_bm |= mask;
 			}
 		}
-
+		if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+			DEBUG_CHANGE_OUTPUT(true, DEBUG_PIN0);
+		}
+	
 		EVENT_SUBMIT(event);
+		if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+			DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN0);
+		}
 
 		rd->items.update_needed = false;
 	} else {
@@ -774,7 +782,7 @@ static void report_issued(const void *subscriber_id, enum in_report tr,
 	}
 
 	struct report_data *rd = &state.report_data[tr];
-
+	
 	if (error) {
 		/* To maintain the sanity of HID state, clear
 		 * all recorded events and items.
@@ -934,6 +942,12 @@ static void init(void)
 			}
 		}
 	}
+
+	if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+		DEBUG_INIT();
+		/*DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN0);
+		DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN4);*/
+	}
 }
 
 static bool handle_motion_event(const struct motion_event *event)
@@ -975,7 +989,13 @@ static bool handle_button_event(const struct button_event *event)
 static bool handle_hid_report_sent_event(
 		const struct hid_report_sent_event *event)
 {
+	if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+		DEBUG_CHANGE_OUTPUT(true, DEBUG_PIN4);
+	}
 	report_issued(event->subscriber, event->report_type, event->error);
+	if (IS_ENABLED(CONFIG_DESKTOP_DEBUG_GPIO_PINS_ENABLE)) {
+		DEBUG_CHANGE_OUTPUT(false, DEBUG_PIN4);
+	}
 
 	return false;
 }
