@@ -103,7 +103,7 @@ manifest:
     - name: hal_nordic
       path: modules/hal/nordic
       remote: zephyrproject
-      revision: 080d1dff4a07b5798ab979fde40dde8da452b854
+      revision: 64f3473398f9fba11059dd0c7ae969e74f74f356
     - name: hal_st
       path: modules/hal/st
       remote: zephyrproject
