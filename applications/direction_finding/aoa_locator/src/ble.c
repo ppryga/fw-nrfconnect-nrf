@@ -8,11 +8,11 @@
 #include "ble.h"
 
 
-static u8_t mfg_data[] = { 0xff, 0xff, 0x00 };
+/*static u8_t mfg_data[] = { 0xff, 0xff, 0x00 };
 
 static const struct bt_data ad[] = {
 	BT_DATA(BT_DATA_MANUFACTURER_DATA, mfg_data, 3),
-};
+};*/
 
 static void scan_cb(const bt_addr_le_t *addr, s8_t rssi, u8_t adv_type,
 		    struct net_buf_simple *buf)
