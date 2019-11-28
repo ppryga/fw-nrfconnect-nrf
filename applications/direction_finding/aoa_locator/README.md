@@ -32,8 +32,8 @@ W funkcji AOA_Handling() realizowana jest najwazniejsza funkcjonalność oprogra
 void AOA_Handling(void)
 {
 #if LOG_DF_PACKET == 0														//Flaga określająca, czy logujemy surowe próbki IQ. Jeśli tak to wyłączamy obsługe AoA z poziomu NRF
-	aoa_config_vector *config = &AOA_CONFIG;
-	aoa_vector *aoa = &AOA;
+	aoa_configuration *config = &AOA_CONFIG;
+	aoa_data *aoa = &AOA;
 
 	struct df_packet df_packet = {0};										//Pakiet zawierający próbki IQ
 	memset(&df_packet, 0, sizeof(df_packet));
@@ -104,7 +104,7 @@ W pierwszej kolejności omówiono funkcję FREQ_Handling(), która odpowiedzialn
 ```C
 void FREQ_Handling(float *iq_in, float *iq_out, uint16_t length)
 {
-	aoa_config_vector *config = &AOA_CONFIG;
+	aoa_configuration *config = &AOA_CONFIG;
 	freq_vector *freq = &FREQ;
 
 	memset(&FREQ, 0, sizeof(FREQ));
@@ -181,7 +181,7 @@ Kolejna funkcja to PDDA_Handling(), która wylicza kąty odbieranego sygnału na
 ```C
 void PDDA_Handling(float *iq_samples)
 {
-	aoa_config_vector *config = &AOA_CONFIG;
+	aoa_configuration *config = &AOA_CONFIG;
 	pdda_vector *pdda = &PDDA;
 	pdda_array *arr = &pdda->array;
 	pdda_matrix *mat = &pdda->matrix;

@@ -1,17 +1,23 @@
 #ifndef __PROTOCOL_H
 #define __PROTOCOL_H
 
+#include <zephyr/types.h>
+#include "if.h"
+#include "aoa.h"
 
-#include "protocol_struct.h"
+#define PROTOCOL_HEAD					"+AoA"
+#define PROTOCOL_BUFFER_SIZE			64
+#define PROTOCOL_STRING_BUFFER_SIZE		4096
 
+typedef struct protocol_data_t
+{
+	device_vector *uart;
+	char string_packet[PROTOCOL_STRING_BUFFER_SIZE];
+} protocol_data;
 
-#define PROTOCOL_HEAD		"+AoA"
-
-
-extern protocol_vector PROTOCOL;
-
-
-void PROTOCOL_Initialization(if_vector* iface);
-void PROTOCOL_Handling(void);
+int PROTOCOL_Initialization(if_data *iface);
+int PROTOCOL_Handling(const aoa_configuration *config,
+		       const struct df_packet *df_packet,
+		       const aoa_results *results);
 
 #endif

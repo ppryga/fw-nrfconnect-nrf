@@ -14,59 +14,60 @@
 #include "common.h"
 #include "if.h"
 
+static protocol_data g_protocol_data;
 
-protocol_vector PROTOCOL;
+static uint16_t protocol_convert_to_string(const aoa_configuration *config,
+					   const struct df_packet *df_packet,
+					   const aoa_results *results, char *buffer,
+					   uint16_t length);
 
-
-
-static uint16_t protocol_convert_to_string(protocol_tx_packet_struct *packet, char *buffer, uint16_t length);
-
-
-void PROTOCOL_Initialization(if_vector* iface)
+int PROTOCOL_Initialization(if_data* iface)
 {
-	protocol_vector *protocol = &PROTOCOL;
-	protocol->uart = &iface->uart_app;
-	printk("PROTOCOL_Initialization: %p %p\r\n", &iface->uart_app, iface->uart_app.send);
+	if (iface == NULL) {
+		return -EINVAL;
+	}
+
+	g_protocol_data.uart = &iface->uart_app;
+	return 0;
 }
 
-
-void PROTOCOL_Handling(void)
+int PROTOCOL_Handling(const aoa_configuration *config, const struct df_packet *df_packet,
+		       const aoa_results *results)
 {
-	protocol_vector *protocol = &PROTOCOL;
+	if (config == NULL || df_packet == NULL || results == NULL) {
+		return -EINVAL;
+	}
 
 	uint16_t length = 0;
 
-	switch (protocol->tx_status)
-	{
-		case PROTOCOL_REQUEST_STRING_SEND:
-			length = protocol_convert_to_string(&protocol->tx_packet, protocol->string_packet, PROTOCOL_STRING_BUFFER_SIZE);
-			//printk("PROTOCOL_Handling send: %p\r\n",protocol->uart->send);
-			protocol->uart->send(protocol->string_packet, length);
-			protocol->tx_status = PROTOCOL_PENDING_FOR_DATA;
-			break;
-		default:
-			break;
-	}
+	length = protocol_convert_to_string(config, df_packet, results, g_protocol_data.string_packet, PROTOCOL_STRING_BUFFER_SIZE);
+	//printk("PROTOCOL_Handling %s\r\n",protocol->string_packet);
+	g_protocol_data.uart->send(g_protocol_data.string_packet, length);
+
+	return 0;
 }
 
-static uint16_t protocol_convert_to_string(protocol_tx_packet_struct *packet, char *buffer, uint16_t length)
+static uint16_t protocol_convert_to_string(const aoa_configuration *config, const struct df_packet *df_packet,
+		const aoa_results *results, char *buffer, uint16_t length)
 {
 	printk("DF_BEGIN\r\n");
 	uint16_t strlen = sprintf(buffer, "DF_BEGIN\r\n");
 
-	strlen += sprintf(&buffer[strlen], "SW:%d\r\n", (int)packet->df_sw);
-	strlen += sprintf(&buffer[strlen], "RR:%d\r\n", (int)packet->df_r);
-	strlen += sprintf(&buffer[strlen], "SS:%d\r\n", (int)packet->df_s);
-	strlen += sprintf(&buffer[strlen], "FR:%d\r\n", (int)packet->frequency);
+	strlen += sprintf(&buffer[strlen], "SW:%d\r\n", (int)config->df_sw);
+	strlen += sprintf(&buffer[strlen], "RR:%d\r\n", (int)config->df_r);
+	strlen += sprintf(&buffer[strlen], "SS:%d\r\n", (int)config->df_s);
+	strlen += sprintf(&buffer[strlen], "FR:%d\r\n", (int)results->frequency);
 
-	strlen += sprintf(&buffer[strlen], "ME:%d\r\n", (int)packet->pdda_elevation);
-	strlen += sprintf(&buffer[strlen], "MA:%d\r\n", (int)packet->pdda_azimuth);
-	strlen += sprintf(&buffer[strlen], "KE:%d\r\n", (int)packet->kalman_elevation);
-	strlen += sprintf(&buffer[strlen], "KA:%d\r\n", (int)packet->kalman_azimuth);
+	strlen += sprintf(&buffer[strlen], "ME:%d\r\n", (int)results->raw_result.elevation);
+	strlen += sprintf(&buffer[strlen], "MA:%d\r\n", (int)results->raw_result.azimuth);
+	strlen += sprintf(&buffer[strlen], "KE:%d\r\n", (int)results->filtered_result.elevation);
+	strlen += sprintf(&buffer[strlen], "KA:%d\r\n", (int)results->filtered_result.azimuth);
 
-	for(uint16_t i=0; i<packet->iq_length; i++)
+	for(uint16_t i=0; i<results->iq_length; i++)
 	{
-		strlen += sprintf(&buffer[strlen], "IQ:%d,%d,%d,%d,%d\r\n", i, (int)sample_time[i], (int)sample_antenna_id[i], (int)packet->iq[i*2], (int)packet->iq[i*2+1]);
+		strlen += sprintf(&buffer[strlen], "IQ:%d,%d,%d,%d,%d\r\n", i,
+				 (int)sample_time[i], (int)sample_antenna_id[i],
+				 (int)df_packet->data[i].iq.q, (int)df_packet->data[i].iq.i);
 	}
 
 	strlen += sprintf(&buffer[strlen], "DF_END\r\n");
