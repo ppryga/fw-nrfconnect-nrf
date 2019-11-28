@@ -37,7 +37,6 @@ target_sources(app PRIVATE src/main.c
 set(DF_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../../df_aoa_library/lib)
 zephyr_library_link_libraries(${DF_LIB_PATH}/libdf-fpv4-sp-d16.a)
 
-zephyr_library_include_directories(/home/ppryga/nrf5_workspace/direction_finding/nrf_repo/df_aoa_library/include)
-zephyr_library_include_directories(/home/ppryga/nrf5_workspace/direction_finding/nrf_repo/df_aoa_library/ext/math)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../df_aoa_library/include)
 zephyr_library_include_directories($ENV{ZEPHYR_BASE}/samples/bluetooth)
 zephyr_library_include_directories($ENV{ZEPHYR_BASE}/subsys/bluetooth/controller)

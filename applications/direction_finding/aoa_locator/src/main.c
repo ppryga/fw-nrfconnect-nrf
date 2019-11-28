@@ -22,35 +22,50 @@ static const aoa_system_interface sys_iface =
 {
 	.uptime_get = k_uptime_get,
 	.get_sample_antenna_ids = df_get_sample_antenna_ids,
-	.protocol = &PROTOCOL,
 };
 
 extern struct k_msgq df_packet_msgq;
-extern if_vector IF;
+static void* handle;
+static aoa_results results;
 
 void main(void)
 {
-	if_vector* iface = IF_Initialization();
+	if_data* iface = IF_Initialization();
 	
-	PROTOCOL_Initialization(iface);
+	if (iface == NULL) {
+		printk("Output interface initialization failed! Terminating!\r\n");
+		return;
+	}
+
+	if (PROTOCOL_Initialization(iface)) {
+		printk("Protocol intialization failed! Terminating!\r\n");
+		return;
+	}
+
 	BLE_Initialization();
-	if (!AOA_Initialization(&sys_iface)) {
+	if (!AOA_Initialize(&sys_iface, &handle)) {
 		printk("Aoa initialized\r\n");
 	}
+
 	k_sleep(K_MSEC(100));
+
+	const aoa_configuration* aoa_config = AOA_GetConfiguration(handle);
+
 	while(1)
 	{
 		struct df_packet df_packet = {0};
 		memset(&df_packet, 0, sizeof(df_packet));
 		k_msgq_get(&df_packet_msgq, &df_packet, K_NO_WAIT);
 		if (df_packet.hdr.length != 0) {
-			//printk("data arrived\r\n");
-			AOA_Handling(&df_packet);
-			PROTOCOL_Handling();
+			printk("data arrived\r\n");
+			int err = AOA_Handling(handle, &df_packet, &results);
+			if (err) {
+				printk("AoA_Handling error: %d! Stopping the evaluation.\r\n", err);
+				break;
+			}
+
+			PROTOCOL_Handling(aoa_config, &df_packet, &results);
 		}
-		// else {
-		// 	printk("no data\r\n");
-		// }
 	 	k_sleep(K_MSEC(1));
 	}
 }
