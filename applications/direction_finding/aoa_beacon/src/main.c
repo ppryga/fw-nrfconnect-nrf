@@ -85,4 +85,8 @@ void main(void)
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 	}
+
+	while(1){
+		printk("running\r\n");
+	}
 }

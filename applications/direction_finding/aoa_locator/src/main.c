@@ -17,6 +17,8 @@
 #include "ble.h"
 #include "protocol.h"
 #include "ll_sw/df_config.h"
+#include "average_results.h"
+#include "float_ring_buffer.h"
 
 static const aoa_system_interface sys_iface =
 {
@@ -26,12 +28,13 @@ static const aoa_system_interface sys_iface =
 
 extern struct k_msgq df_packet_msgq;
 static void* handle;
-static aoa_results results;
+static aoa_results results = {0,0};
+static aoa_results avg_results;
 
 void main(void)
 {
 	if_data* iface = IF_Initialization();
-	
+
 	if (iface == NULL) {
 		printk("Output interface initialization failed! Terminating!\r\n");
 		return;
@@ -63,8 +66,18 @@ void main(void)
 				printk("AoA_Handling error: %d! Stopping the evaluation.\r\n", err);
 				break;
 			}
-
+			err = LowPassFilter_FIR(&results, &avg_results);
+			if (err) {
+				printk("Averaging error: %d\r\n", err);
+				break;
+			}
+			results.filtered_result.azimuth = avg_results.raw_result.azimuth;
+			results.filtered_result.elevation = avg_results.raw_result.elevation;
 			PROTOCOL_Handling(aoa_config, &df_packet, &results);
+		}
+		else
+		{
+			printk("no data\r\n");
 		}
 	 	k_sleep(K_MSEC(1));
 	}

@@ -32,6 +32,8 @@ target_sources(app PRIVATE src/main.c
 	src/protocol.c
 	src/ble.c
 	src/common.c
+	src/float_ring_buffer.c
+	src/average_results.c
 )
 
 #Include DF library
