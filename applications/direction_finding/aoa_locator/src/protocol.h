@@ -7,7 +7,7 @@
 
 #define PROTOCOL_HEAD					"+AoA"
 #define PROTOCOL_BUFFER_SIZE			64
-#define PROTOCOL_STRING_BUFFER_SIZE		4096
+#define PROTOCOL_STRING_BUFFER_SIZE		10240
 
 typedef struct protocol_data_t
 {
