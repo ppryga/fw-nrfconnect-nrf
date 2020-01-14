@@ -34,9 +34,11 @@ target_sources(app PRIVATE src/main.c
 	src/common.c
 )
 
-set(DF_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../../df_aoa_library/lib)
-zephyr_library_link_libraries(${DF_LIB_PATH}/libdf-fpv4-sp-d16.a)
+#Include DF library
+set(DF_LIB_BASE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../../df_aoa_library)
+target_link_directories(app PUBLIC ${DF_LIB_BASE_PATH}/lib)
+target_link_libraries(app PRIVATE libdf-fpv4-sp-d16.a)
+target_include_directories(app PRIVATE ${DF_LIB_BASE_PATH}/include)
 
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../df_aoa_library/include)
-zephyr_library_include_directories($ENV{ZEPHYR_BASE}/samples/bluetooth)
-zephyr_library_include_directories($ENV{ZEPHYR_BASE}/subsys/bluetooth/controller)
+target_include_directories(app PRIVATE $ENV{ZEPHYR_BASE}/samples/bluetooth)
+target_include_directories(app PRIVATE $ENV{ZEPHYR_BASE}/subsys/bluetooth/controller)
