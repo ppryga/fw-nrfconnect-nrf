@@ -10,7 +10,7 @@
 #include <zephyr/types.h>
 #include <device.h>
 #include <drivers/uart.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
@@ -474,9 +474,8 @@ static void enable_qos_reporting(void)
 	cmd_enable = net_buf_add(buf, sizeof(*cmd_enable));
 	cmd_enable->enable = 1;
 
-	err = bt_hci_cmd_send(
-		HCI_VS_OPCODE_CMD_QOS_CONN_EVENT_REPORT_ENABLE,
-		buf);
+	err = bt_hci_cmd_send_sync(
+		HCI_VS_OPCODE_CMD_QOS_CONN_EVENT_REPORT_ENABLE, buf, NULL);
 	if (err) {
 		LOG_ERR("Failed to enable HCI VS QoS");
 		return;

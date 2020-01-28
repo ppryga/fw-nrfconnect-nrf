@@ -39,9 +39,9 @@ This is accomplished by the following steps:
 #. Boot the next stage in the boot chain.
     After verifying the next boot stage, the bootloader sample uninitializes all peripherals that it used and boots the next boot stage.
 
-#. Share the cryptographic library over ABI.
+#. Share the cryptographic library over EXT_API.
      The bootloader sample does not contain any flash writing code.
-     Therefore, it is safe to share some of its functionality through an Application Binary Interface (ABI, see :ref:`doc_fw_info_abi`).
+     Therefore, it is safe to share some of its functionality through an External API (EXT_API, see :ref:`doc_fw_info_ext_api`).
      For more information, see :file:`bl_crypto.h`.
 
 
@@ -73,10 +73,10 @@ Requirements
 
 * One of the following development boards:
 
-  * nRF9160 DK board (PCA10090)
-  * nRF52840 Development Kit board (PCA10056)
-  * nRF52 Development Kit board (PCA10040)
-  * nRF51 Development Kit board (PCA10028)
+  * |nRF9160DK|
+  * |nRF52840DK|
+  * |nRF52DK|
+  * |nRF51DK|
 
 .. _bootloader_build_and_run:
 

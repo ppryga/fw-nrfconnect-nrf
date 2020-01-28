@@ -38,6 +38,8 @@ enum cloud_channel {
 	CLOUD_CHANNEL_RGB_LED,
 	/** The BUZZER on the device. */
 	CLOUD_CHANNEL_BUZZER,
+	/** The environmental sensors channel. */
+	CLOUD_CHANNEL_ENVIRONMENT,
 	/** The TEMP sensor on the device. */
 	CLOUD_CHANNEL_TEMP,
 	/** The Humidity sensor on the device. */
@@ -60,21 +62,32 @@ enum cloud_channel {
 	CLOUD_CHANNEL_LIGHT_BLUE,
 	/** The IR light level on the device. */
 	CLOUD_CHANNEL_LIGHT_IR,
+	/** The assisted GPS channel. */
+	CLOUD_CHANNEL_ASSISTED_GPS,
+	/** The modem channel. */
+	CLOUD_CHANNEL_MODEM,
+
+	CLOUD_CHANNEL__TOTAL
 };
 
 #define CLOUD_CHANNEL_STR_GPS "GPS"
 #define CLOUD_CHANNEL_STR_FLIP "FLIP"
 #define CLOUD_CHANNEL_STR_BUTTON "BUTTON"
+#define CLOUD_CHANNEL_STR_ENVIRONMENT "ENV"
 #define CLOUD_CHANNEL_STR_TEMP "TEMP"
 #define CLOUD_CHANNEL_STR_HUMID "HUMID"
 #define CLOUD_CHANNEL_STR_AIR_PRESS "AIR_PRESS"
 #define CLOUD_CHANNEL_STR_AIR_QUAL "AIR_QUAL"
 #define CLOUD_CHANNEL_STR_LTE_LINK_RSRP "RSRP"
-/* The "device" is intended for the shadow, which expects its objects
- * to have lowercase keys.
- */
-#define CLOUD_CHANNEL_STR_DEVICE_INFO "device"
+#define CLOUD_CHANNEL_STR_DEVICE_INFO "DEVICE"
 #define CLOUD_CHANNEL_STR_LIGHT_SENSOR "LIGHT"
+#define CLOUD_CHANNEL_STR_LIGHT_RED "LIGHT_RED"
+#define CLOUD_CHANNEL_STR_LIGHT_GREEN "LIGHT_GREEN"
+#define CLOUD_CHANNEL_STR_LIGHT_BLUE "LIGHT_BLUE"
+#define CLOUD_CHANNEL_STR_LIGHT_IR "LIGHT_IR"
+#define CLOUD_CHANNEL_STR_ASSISTED_GPS "AGPS"
+#define CLOUD_CHANNEL_STR_RGB_LED "LED"
+#define CLOUD_CHANNEL_STR_MODEM "MODEM"
 
 struct cloud_data {
 	char *buf;
@@ -94,32 +107,44 @@ struct cloud_channel_data {
 };
 
 enum cloud_cmd_group {
-	CLOUD_CMD_GROUP_SET,
+	CLOUD_CMD_GROUP_HELLO,
+	CLOUD_CMD_GROUP_START,
+	CLOUD_CMD_GROUP_STOP,
+	CLOUD_CMD_GROUP_INIT,
 	CLOUD_CMD_GROUP_GET,
+	CLOUD_CMD_GROUP_STATUS,
+	CLOUD_CMD_GROUP_DATA,
+	CLOUD_CMD_GROUP_OK,
+	CLOUD_CMD_GROUP_CFG_SET,
+	CLOUD_CMD_GROUP_CFG_GET,
+	CLOUD_CMD_GROUP_COMMAND,
+
+	CLOUD_CMD_GROUP__TOTAL
 };
 
-enum cloud_cmd_recipient {
-	CLOUD_RCPT_ENVIRONMENT,
-	CLOUD_RCPT_MOTION,
-	CLOUD_RCPT_UI,
-	CLOUD_RCPT_MODEM_INFO,
-	CLOUD_RCPT_LIGHT,
-};
+#define CLOUD_CMD_GROUP_STR_HELLO "HELLO"
+#define CLOUD_CMD_GROUP_STR_START "START"
+#define CLOUD_CMD_GROUP_STR_STOP "STOP"
+#define CLOUD_CMD_GROUP_STR_INIT "INIT"
+#define CLOUD_CMD_GROUP_STR_GET "GET"
+#define CLOUD_CMD_GROUP_STR_STATUS "STATUS"
+#define CLOUD_CMD_GROUP_STR_DATA "DATA"
+#define CLOUD_CMD_GROUP_STR_OK "OK"
+#define CLOUD_CMD_GROUP_STR_CFG_SET "CFG_SET"
+#define CLOUD_CMD_GROUP_STR_CFG_GET "CFG_GET"
+#define CLOUD_CMD_GROUP_STR_COMMAND "CMD"
 
 enum cloud_cmd_type {
+	CLOUD_CMD_EMPTY,
 	CLOUD_CMD_ENABLE,
 	CLOUD_CMD_THRESHOLD_HIGH,
 	CLOUD_CMD_THRESHOLD_LOW,
-	CLOUD_CMD_READ,
-	CLOUD_CMD_READ_NEW,
-	CLOUD_CMD_PWM,
-	CLOUD_CMD_LED_RED,
-	CLOUD_CMD_LED_GREEN,
-	CLOUD_CMD_LED_BLUE,
-	CLOUD_CMD_LED_PULSE_LENGTH,
-	CLOUD_CMD_LED_PAUSE_LENGTH,
-	CLOUD_CMD_PLAY_MELODY,
-	CLOUD_CMD_PLAY_NOTE,
+	CLOUD_CMD_INTERVAL,
+	CLOUD_CMD_COLOR,
+	CLOUD_CMD_MODEM_PARAM,
+	CLOUD_CMD_DATA_STRING,
+
+	CLOUD_CMD__TOTAL
 };
 
 enum cloud_cmd_state {
@@ -128,14 +153,40 @@ enum cloud_cmd_state {
 	CLOUD_CMD_STATE_TRUE,
 };
 
-struct cloud_command {
-	enum cloud_cmd_group group; /* The group the decoded command belongs to. */
-	enum cloud_cmd_recipient recipient; /* The command's recipient module. */
-	enum cloud_channel channel; /* The command's desired channel. */
-	enum cloud_cmd_type type; /* The command type, the desired action. */
+#define CLOUD_CMD_TYPE_STR_EMPTY "empty"
+#define CLOUD_CMD_TYPE_STR_ENABLE "enable"
+#define CLOUD_CMD_TYPE_STR_THRESH_LO "thresh_lo"
+#define CLOUD_CMD_TYPE_STR_THRESH_HI "thresh_hi"
+#define CLOUD_CMD_TYPE_STR_INTERVAL "interval"
+#define CLOUD_CMD_TYPE_STR_COLOR "color"
+#define CLOUD_CMD_TYPE_STR_MODEM_PARAM "modemParams"
+#define CLOUD_CMD_TYPE_STR_DATA_STRING "data_string"
+
+
+#define MODEM_PARAM_BLOB_KEY_STR "blob"
+#define MODEM_PARAM_CHECKSUM_KEY_STR "checksum"
+
+struct cloud_command_state_value {
 	double value; /* The value to be written to the recipient/channel. */
 	/* The truth value to be written to the recipient/channel. */
 	enum cloud_cmd_state state;
+};
+
+struct cloud_command_modem_params {
+	/* TODO: add proper members when A-GPS is implemented */
+	char *blob;
+	char *checksum;
+};
+
+struct cloud_command {
+	enum cloud_cmd_group group; /* The decoded command's group. */
+	enum cloud_channel channel; /* The command's desired channel. */
+	enum cloud_cmd_type type; /* The command type, the desired action. */
+	union {
+		struct cloud_command_state_value sv;
+		struct cloud_command_modem_params mp;
+		char *data_string;
+	} data;
 };
 
 typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
@@ -144,12 +195,13 @@ typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
  * @brief Encode cloud data.
  *
  * @param channel The cloud channel type.
+ * @param group The channel data's group.
  * @param output Pointer to the cloud data output.
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_data(const struct cloud_channel_data *channel,
-		      struct cloud_msg *output);
+	const enum cloud_cmd_group group, struct cloud_msg *output);
 
 /**
  * @brief Decode cloud data.
@@ -180,7 +232,7 @@ int cloud_decode_init(cloud_cmd_cb_t cb);
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
-				 struct cloud_msg *output);
+				   struct cloud_msg *output);
 
 /**
  * @brief Releases memory used by cloud data structure.
@@ -198,13 +250,12 @@ int cloud_encode_env_sensors_data(const env_sensor_data_t *sensor_data,
 				  struct cloud_msg *output);
 
 int cloud_encode_motion_data(const motion_data_t *motion_data,
-				  struct cloud_msg *output);
+			     struct cloud_msg *output);
 
 #if CONFIG_LIGHT_SENSOR
 int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 				   struct cloud_msg *output);
 #endif /* CONFIG_LIGHT_SENSOR */
-
 
 /**
  * @brief Checks if data could be sent to the cloud based on config.

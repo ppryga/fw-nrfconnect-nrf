@@ -29,9 +29,9 @@ Requirements
 
   * |nRF9160DK|
   * |nRF5340DK|
-  * nRF52840 Development Kit board (PCA10056)
-  * nRF52 Development Kit board (PCA10040)
-  * nRF51 Development Kit board (PCA10028)
+  * |nRF52840DK|
+  * |nRF52DK|
+  * |nRF51DK|
 
 User interface
 **************
@@ -127,8 +127,8 @@ In addition, it uses the following Zephyr libraries:
 * ``include/zephyr/types.h``
 * ``lib/libc/minimal/include/assert.h``
 * ``lib/libc/minimal/include/errno.h``
-* ``include/misc/printk.h``
-* ``include/misc/byteorder.h``
+* ``include/sys/printk.h``
+* ``include/sys/byteorder.h``
 * :ref:`GPIO Interface <zephyr:api_peripherals>`
 * :ref:`zephyr:settings`
 * :ref:`zephyr:bluetooth_api`:

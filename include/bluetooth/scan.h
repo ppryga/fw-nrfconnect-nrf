@@ -26,7 +26,7 @@
 #define BT_SCAN_H_
 
 #include <zephyr/types.h>
-#include <misc/slist.h>
+#include <sys/slist.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/conn.h>
@@ -417,6 +417,14 @@ int bt_scan_start(enum bt_scan_type scan_type);
 /**@brief Function for stopping scanning.
  */
 int bt_scan_stop(void);
+
+/**@brief Function to update initial connection parameters.
+ *
+ * @note The function should not be used when scanning is active.
+ *
+ * @param[in] new_conn_param New initial connection parameters.
+ */
+void bt_scan_update_init_conn_params(struct bt_le_conn_param *new_conn_param);
 
 #if CONFIG_BT_SCAN_FILTER_ENABLE
 

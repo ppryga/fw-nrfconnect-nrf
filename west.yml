@@ -20,6 +20,8 @@ manifest:
     remote: ncs
 
   remotes:
+    - name: apps-fw
+      url-base: ssh://git@bitbucket.nordicsemi.no:7999/apps-fw
       # nRF Connect SDK base URL.
     - name: ncs
       url-base: https://github.com/NordicPlayground
@@ -29,16 +31,15 @@ manifest:
       url-base: https://github.com/ThrowTheSwitch
     - name: armmbed
       url-base: https://github.com/ARMmbed
-    - name: civetweb
-      url-base: https://github.com/civetweb
 
   # The list of external projects for the nRF Connect SDK.
   #
   projects:
     - name: zephyr
-      repo-path: fw-nrfconnect-zephyr
+      repo-path: df_zephyr
       west-commands: scripts/west-commands.yml
-      revision: b687d5d02214db82e5bd224e73b8050742a234e0
+      revision: 4670ae0e891985c9ff66b97b55e948b2868c18f7
+      remote: apps-fw
     - name: nffs
       revision: bc62a2fa9d98ddb5d633c932ea199bc68e10f194
       path: modules/fs/nffs
@@ -48,31 +49,31 @@ manifest:
       path: modules/debug/segger
       remote: zephyrproject
     - name: mbedtls
-      repo-path: fw-nrfconnect-mbedtls
       path: modules/crypto/mbedtls
-      revision: 9d56815aa4abf99a6e96af6ed035968add4b8cab
+      revision: 4f1e8f5a78dc08aa42a47cc1ad059cce558c26c3
+      remote: zephyrproject
     - name: mcuboot
       repo-path: fw-nrfconnect-mcuboot
-      revision: 891d18dc8e897292c78f9f1ae650e494770a8cd8
+      revision: 0b59f48e4dce86d0c8d4e09688feb362c7223ad3
     - name: mcumgr
       repo-path: fw-nrfconnect-mcumgr
       revision: f663988d35da559a37f263d369842dbce309d1fa
       path: modules/lib/mcumgr
     - name: tinycbor
-      repo-path: fw-nrfconnect-tinycbor
       path: modules/lib/tinycbor
-      revision: 86d5ed5dd544b107d2d0882961a19c2c6cb06572
+      revision: 0fc68fceacd1efc1ce809c5880c380f3d98b7b6e
+      remote: zephyrproject
     - name: ci-tools
       path: tools/ci-tools
       remote: zephyrproject
-      revision: 20aa511fbd302ba8429a9ab04ee96c201b547743
+      revision: c083680dd5e281218ddb47d0ceac5c5fd5619749
     - name: net-tools
       path: tools/net-tools
       remote: zephyrproject
       revision: 30b7efa827b04d2e47840716b0372737fe7d6c92
     - name: nrfxlib
       path: nrfxlib
-      revision: dc9e1fbd146f5032fd3651b1e7705d8b3258ecc2
+      revision: 439a0e1f2b9a7c55286b9a02fdd1132c12c6a6cd
     - name: cmock
       path: test/cmock
       revision: c243b9a7a7b3c471023193992b46cf1bd1910450
@@ -92,10 +93,6 @@ manifest:
     # manager patchset. Please report any issues.
     #
     # https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/scripts/partition_manager/partition_manager.html
-    - name: civetweb
-      path: modules/lib/civetweb
-      remote: civetweb
-      revision: 99129c5efc907ea613c4b73ccff07581feb58a7a
     - name: fatfs
       path: modules/fs/fatfs
       remote: zephyrproject

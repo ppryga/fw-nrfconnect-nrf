@@ -58,6 +58,7 @@
 
 .. _`system mode section in the AT Commands reference document`: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/mob_termination_ctrl_status/xsystemmode.html
 
+.. _`Credential storage management %CMNG`: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/mob_termination_ctrl_status/cmng.html
 .. _`nRF5340 Product Specification`: https://infocenter.nordicsemi.com/topic/ps_nrf5340/keyfeatures_html5.html
 
 
@@ -184,6 +185,11 @@
 
 .. _`generator expressions`: https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
 
+.. _`CMake documentation`: https://cmake.org/cmake/help/latest/
+
+.. _`VERBOSE`: https://cmake.org/cmake/help/latest/envvar/VERBOSE.html
+.. _`CMAKE_BUILD_PARALLEL_LEVEL`: https://cmake.org/cmake/help/latest/envvar/CMAKE_BUILD_PARALLEL_LEVEL.html
+
 .. _`AWS IoT Developer Guide`: https://docs.aws.amazon.com/iot/latest/developerguide/what-is-aws-iot.html
 .. _`AWS IoT MQTT`: https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html
 .. _`AWS IoT Developer Guide: Basic Policy Variables`: https://docs.aws.amazon.com/iot/latest/developerguide/basic-policy-variables.html
@@ -203,3 +209,7 @@
 .. _`west manifest file`: https://github.com/NordicPlayground/fw-nrfconnect-nrf/blob/master/west.yml
 
 .. _`tests/unity/example_test/CMakeLists.txt`: https://github.com/NordicPlayground/fw-nrfconnect-nrf/blob/master/tests/unity/example_test/CMakeLists.txt
+
+.. _`CoAP response codes`: https://tools.ietf.org/html/rfc7252#section-12.1.2
+
+.. _`RFC 7252 - The Constrained Application Protocol`: https://tools.ietf.org/html/rfc7252

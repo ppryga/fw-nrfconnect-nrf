@@ -7,6 +7,8 @@
 #ifndef NRF_CLOUD_CODEC_H__
 #define NRF_CLOUD_CODEC_H__
 
+#include <stdbool.h>
+
 #include <nrf_cloud.h>
 #include "nrf_cloud_fsm.h"
 
@@ -16,11 +18,6 @@ extern "C" {
 
 /**@brief Initialize the codec used encoding the data to the cloud. */
 int nrf_codec_init(void);
-
-
-/**@brief Encode the user association data based on the indicated type. */
-int nrf_cloud_encode_ua(const struct nrf_cloud_ua_param *param,
-			struct nrf_cloud_data *output);
 
 /**@brief Encode the sensor data based on the indicated type. */
 int nrf_cloud_encode_sensor_data(const struct nrf_cloud_sensor_data *input,
@@ -42,6 +39,11 @@ int nrf_cloud_decode_data_endpoint(const struct nrf_cloud_data *input,
 
 /** @brief Encodes state information. */
 int nrf_cloud_encode_state(u32_t reported_state, struct nrf_cloud_data *output);
+
+/** @brief Search input for config and encode response if necessary. */
+int nrf_cloud_encode_config_response(struct nrf_cloud_data const *const input,
+				     struct nrf_cloud_data *const output,
+				     bool *const has_config);
 
 #ifdef __cplusplus
 }

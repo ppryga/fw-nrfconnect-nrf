@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
 #
 
+menu "Bootloader"
+
 config MCUBOOT_BUILD_S1_VARIANT
 	# This can not depend on BOOTLOADER_MCUBOOT, or SECURE_BOOT as this
 	# option has to be set when building MCUBoot itself. Instead an error
@@ -12,18 +14,10 @@ config MCUBOOT_BUILD_S1_VARIANT
 	help
 	  Build upgrade candidate of MCUBoot for alternative slot S1.
 
-config SECURE_BOOT_CRYPTO_CLIENT
-	bool "Include Secure Bootloader crypto client API"
-	help
-	  Set this option to enable the crypto client API
-	  which gives access to the cryptographic functions
-	  from the secure bootloader. This will only work
-	  when the secure bootloader is enabled.
-
 config SECURE_BOOT
 	bool "Use Secure Bootloader"
 	depends on !IS_SECURE_BOOTLOADER
-	select SECURE_BOOT_VALIDATION
+	depends on FW_INFO
 	help
 	  Set this option to enable the first stage bootloader which
 	  verifies the signature of the app.
@@ -39,7 +33,6 @@ config SB_PRIVATE_KEY_PROVIDED
 	  Hidden config specifying whether the build system has access to the
 	  private key used for signing, and will use it to perform signing and
 	  create the public key for the provision page.
-
 
 choice SB_SIGNING
 	prompt "Firmware signing method"
@@ -114,12 +107,11 @@ config SB_DEBUG_SIGNATURE_PUBLIC_KEY_LAST
 	  first. This is meant to be used for testing looping through the
 	  public keys.
 
-
 endif # SECURE_BOOT
 
 menuconfig IS_SECURE_BOOTLOADER
 	bool "Current app is bootloader"
-	select SECURE_BOOT_VALIDATION
+	depends on SECURE_BOOT_VALIDATION
 	select SW_VECTOR_RELAY if SOC_SERIES_NRF51X
 	help
 	  This option is set by the first stage bootloader app to include all
@@ -162,10 +154,7 @@ config SB_BPROT_IN_DEBUG
 endif # SECURE_BOOT_DEBUG
 endif # IS_SECURE_BOOTLOADER
 
-if IS_SECURE_BOOTLOADER || SECURE_BOOT || SECURE_BOOT_CRYPTO_CLIENT
-
 rsource "bl_crypto/Kconfig"
 rsource "bl_validation/Kconfig"
 
-endif
-
+endmenu

@@ -26,8 +26,8 @@ Requirements
 
 * One of the following development boards:
 
-  * nRF52840 Development Kit board (PCA10056)
-  * nRF52 Development Kit board (PCA10040)
+  * |nRF52840DK|
+  * |nRF52DK|
 
 * NFC Reader ST25R3911B Nucleo expansion board (X-NUCLEO-NFC05A1)
 * NFC Type 2 Tag or Type 4 Tag
@@ -69,4 +69,4 @@ This sample uses the following |NCS| libraries:
 In addition, it uses the following Zephyr libraries:
 
 * ``include/zephyr/types.h``
-* ``include/misc/printk.h``
+* ``include/sys/printk.h``

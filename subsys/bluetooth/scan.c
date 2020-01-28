@@ -5,7 +5,7 @@
  */
 
 #include <zephyr.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <string.h>
 #include <bluetooth/scan.h>
 
@@ -1169,6 +1169,11 @@ void bt_scan_init(const struct bt_scan_init_param *init)
 
 		bt_scan.connect_if_match = false;
 	}
+}
+
+void bt_scan_update_init_conn_params(struct bt_le_conn_param *new_conn_param)
+{
+	bt_scan.conn_param = *new_conn_param;
 }
 
 static void check_enabled_filters(struct bt_scan_control *control)

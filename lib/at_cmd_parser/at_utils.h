@@ -19,14 +19,15 @@
 #include <stddef.h>
 #include <ctype.h>
 
-#define AT_PARAM_SEPARATOR              ','
-#define AT_RSP_SEPARATOR                ':'
-#define AT_CMD_SEPARATOR                '='
-#define AT_CMD_BUFFER_TERMINATOR        0
-#define AT_CMD_STRING_IDENTIFIER        '\"'
+#define AT_PARAM_SEPARATOR ','
+#define AT_RSP_SEPARATOR ':'
+#define AT_CMD_SEPARATOR '='
+#define AT_CMD_READ_TEST_IDENTIFIER '?'
+#define AT_CMD_BUFFER_TERMINATOR 0
+#define AT_CMD_STRING_IDENTIFIER '\"'
 #define AT_STANDARD_NOTIFICATION_PREFIX '+'
-#define AT_PROP_NOTIFICATION_PREFX      '%'
-#define AT_CUSTOM_COMMAND_PREFX         '#'
+#define AT_PROP_NOTIFICATION_PREFX '%'
+#define AT_CUSTOM_COMMAND_PREFX '#'
 
 /**
  * @brief Check if character is a notification start character
@@ -43,33 +44,6 @@ static inline bool is_notification(char chr)
 {
 	if ((chr == AT_STANDARD_NOTIFICATION_PREFIX) ||
 	    (chr == AT_PROP_NOTIFICATION_PREFX)) {
-		return true;
-	}
-
-	return false;
-}
-
-/**
- * @brief Check if a string is a beginning of an AT command
- *
- * This function will check if the character is a "AT+" or "AT%" which
- * identifies an AT command.
- *
- * @param[in] str String to examine
- *
- * @retval true  If the string is an AT command
- * @retval false Otherwise
- */
-static inline bool is_command(const char *str)
-{
-	if (strlen(str) < 3) {
-		return false;
-	}
-
-	if ((toupper(str[0]) == 'A') && (toupper(str[1]) == 'T') &&
-	    ((str[2] == AT_STANDARD_NOTIFICATION_PREFIX) ||
-	     (str[2] == AT_PROP_NOTIFICATION_PREFX) ||
-	     (str[2] == AT_CUSTOM_COMMAND_PREFX))) {
 		return true;
 	}
 
@@ -130,8 +104,7 @@ static inline bool is_terminated(char chr)
  */
 static inline bool is_separator(char chr)
 {
-	if ((chr == AT_PARAM_SEPARATOR) ||
-	    (chr == AT_RSP_SEPARATOR) ||
+	if ((chr == AT_PARAM_SEPARATOR) || (chr == AT_RSP_SEPARATOR) ||
 	    (chr == AT_CMD_SEPARATOR)) {
 		return true;
 	}
@@ -151,8 +124,7 @@ static inline bool is_separator(char chr)
  */
 static inline bool is_lfcr(char chr)
 {
-	if ((chr == '\r') ||
-	    (chr == '\n')) {
+	if ((chr == '\r') || (chr == '\n')) {
 		return true;
 	}
 
@@ -229,9 +201,40 @@ static inline bool is_array_stop(char chr)
  */
 static inline bool is_number(char chr)
 {
-	if (isdigit(chr) ||
-	    (chr == '-') ||
-	    (chr == '+')) {
+	if (isdigit(chr) || (chr == '-') || (chr == '+')) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * @brief Check if a string is a beginning of an AT command
+ *
+ * This function will check if the string is a valid AT command prefix.
+ *
+ * @param[in] str String to examine
+ *
+ * @retval true  If the string is an AT command
+ * @retval false Otherwise
+ */
+static inline bool is_command(const char *str)
+{
+	if (strlen(str) < 2) {
+		return false;
+	}
+
+	if ((toupper(str[0]) != 'A') || (toupper(str[1]) != 'T')) {
+		return false;
+	}
+
+	/* Third character has be one of the command special characters.
+	 * The special case is a lone "AT" command.
+	 */
+	if ((str[2] == AT_STANDARD_NOTIFICATION_PREFIX) ||
+	    (str[2] == AT_PROP_NOTIFICATION_PREFX) ||
+	    (str[2] == AT_CUSTOM_COMMAND_PREFX) ||
+	    is_lfcr(str[2]) || is_terminated(str[2])) {
 		return true;
 	}
 

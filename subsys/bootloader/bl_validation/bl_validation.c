@@ -6,31 +6,55 @@
 
 #include <bl_validation.h>
 #include <zephyr/types.h>
-#include <errno.h>
-#include <misc/printk.h>
 #include <fw_info.h>
+#include <kernel.h>
+
+
+#ifdef CONFIG_BL_VALIDATE_FW_EXT_API_REQUIRED
+bool bl_validate_firmware(u32_t fw_dst_address, u32_t fw_src_address)
+{
+	const struct bl_validate_fw_ext_api *bl_validate_fw =
+		(const struct bl_validate_fw_ext_api *)
+		fw_info_ext_api_find(BL_VALIDATE_FW_EXT_API_ID,
+				CONFIG_BL_VALIDATE_FW_EXT_API_FLAGS,
+				CONFIG_BL_VALIDATE_FW_EXT_API_VER,
+				CONFIG_BL_VALIDATE_FW_EXT_API_MAX_VER);
+
+	if (bl_validate_fw == NULL) {
+		k_oops();
+		return false;
+	}
+
+	return bl_validate_fw->ext_api.bl_validate_firmware(fw_dst_address,
+							fw_src_address);
+}
+
+
+#else
+#include <errno.h>
+#include <sys/printk.h>
 #include <bl_crypto.h>
 #include <provision.h>
 
-#define PRINT(...) printk(__VA_ARGS__)
+#define PRINT(...) if (!external) printk(__VA_ARGS__)
 
 struct __packed fw_validation_info {
 	/* Magic value to verify that the struct has the correct type. */
 	u32_t magic[MAGIC_LEN_WORDS];
 
 	/* The address of the start (vector table) of the firmware. */
-	u32_t firmware_address;
+	u32_t address;
 
 	/* The hash of the firmware.*/
-	u8_t  firmware_hash[CONFIG_SB_HASH_LEN];
+	u8_t  hash[CONFIG_SB_HASH_LEN];
 
 	/* Public key to be used for signature verification. This must be
 	 * checked against a trusted hash.
 	 */
 	u8_t  public_key[CONFIG_SB_PUBLIC_KEY_LEN];
 
-	/* Signature over the firmware as represented by the firmware_address
-	 * and firmware_size in the firmware_info.
+	/* Signature over the firmware as represented by the address and size in
+	 * the firmware_info.
 	 */
 	u8_t  signature[CONFIG_SB_SIGNATURE_LEN];
 };
@@ -38,9 +62,9 @@ struct __packed fw_validation_info {
 
 /* Static asserts to ensure compatibility */
 OFFSET_CHECK(struct fw_validation_info, magic, 0);
-OFFSET_CHECK(struct fw_validation_info, firmware_address,
+OFFSET_CHECK(struct fw_validation_info, address,
 	CONFIG_FW_INFO_MAGIC_LEN);
-OFFSET_CHECK(struct fw_validation_info, firmware_hash,
+OFFSET_CHECK(struct fw_validation_info, hash,
 	(CONFIG_FW_INFO_MAGIC_LEN + 4));
 OFFSET_CHECK(struct fw_validation_info, public_key,
 	(CONFIG_FW_INFO_MAGIC_LEN + 4 + CONFIG_SB_HASH_LEN));
@@ -66,8 +90,8 @@ static bool validation_info_check(const struct fw_validation_info *vinfo)
 {
 	const u32_t validation_info_magic[] = {VALIDATION_INFO_MAGIC};
 
-	if (memeq(vinfo->magic, validation_info_magic,
-						CONFIG_FW_INFO_MAGIC_LEN)) {
+	if (memcmp(vinfo->magic, validation_info_magic,
+					CONFIG_FW_INFO_MAGIC_LEN) == 0) {
 		return vinfo;
 	}
 	return NULL;
@@ -91,7 +115,7 @@ validation_info_find(u32_t start_address, u32_t search_distance)
 
 
 static bool validate_firmware(u32_t fw_dst_address, u32_t fw_src_address,
-		const struct fw_info *fwinfo)
+		const struct fw_info *fwinfo, bool external)
 {
 	/* Some key data storage backends require word sized reads, hence
 	 * we need to ensure word alignment for 'key_data'
@@ -101,7 +125,9 @@ static bool validate_firmware(u32_t fw_dst_address, u32_t fw_src_address,
 	int err;
 	const struct fw_validation_info *fw_val_info;
 	u32_t num_public_keys;
-	bl_root_of_trust_verify_t rot_verify = bl_root_of_trust_verify;
+	bl_root_of_trust_verify_t rot_verify = external ?
+					bl_root_of_trust_verify_external :
+					bl_root_of_trust_verify;
 
 	if (!fwinfo) {
 		PRINT("NULL parameter.\n\r");
@@ -115,25 +141,25 @@ static bool validate_firmware(u32_t fw_dst_address, u32_t fw_src_address,
 
 	if (!(((u32_t)fwinfo >= fw_src_address)
 		&& (((u32_t)fwinfo + sizeof(*fwinfo))
-			< (fw_src_address + fwinfo->firmware_size)))) {
+			< (fw_src_address + fwinfo->size)))) {
 		PRINT("Firmware info is not within signed region.\n\r");
 		return false;
 	}
 
-	if (fw_dst_address != fwinfo->firmware_address) {
+	if (fw_dst_address != fwinfo->address) {
 		PRINT("The firmware doesn't belong at destination addr.\n\r");
 		return false;
 	}
 
 	fw_val_info = validation_info_find(
-		fw_src_address + fwinfo->firmware_size, 4);
+		fw_src_address + fwinfo->size, 4);
 
 	if (!fw_val_info) {
 		PRINT("Could not find valid firmware validation info.\n\r");
 		return false;
 	}
 
-	if (fw_val_info->firmware_address != fwinfo->firmware_address) {
+	if (fw_val_info->address != fwinfo->address) {
 		PRINT("Validation info doesn't belong to this firmware.\n\r");
 		return false;
 	}
@@ -160,8 +186,8 @@ static bool validate_firmware(u32_t fw_dst_address, u32_t fw_src_address,
 		retval = rot_verify(fw_val_info->public_key,
 					(u8_t *)key_data,
 					fw_val_info->signature,
-					(u8_t *)fw_val_info->firmware_address,
-					fwinfo->firmware_size);
+					(u8_t *)fw_src_address,
+					fwinfo->size);
 
 		if (retval != -EHASHINV) {
 			break;
@@ -179,8 +205,30 @@ static bool validate_firmware(u32_t fw_dst_address, u32_t fw_src_address,
 	return true;
 }
 
+
+bool bl_validate_firmware(u32_t fw_dst_address, u32_t fw_src_address)
+{
+	return validate_firmware(fw_dst_address, fw_src_address,
+				fw_info_find(fw_src_address), true);
+}
+
+
 bool bl_validate_firmware_local(u32_t fw_address,
 				const struct fw_info *fwinfo)
 {
-	return validate_firmware(fw_address, fw_address, fwinfo);
+	return validate_firmware(fw_address, fw_address, fwinfo, false);
 }
+#endif
+
+
+#ifdef CONFIG_BL_VALIDATE_FW_EXT_API_ENABLED
+EXT_API(struct bl_validate_fw_ext_api, bl_validate_fw_ext_api) = {
+	.header = FW_INFO_EXT_API_INIT(BL_VALIDATE_FW_EXT_API_ID,
+				CONFIG_BL_VALIDATE_FW_EXT_API_FLAGS,
+				CONFIG_BL_VALIDATE_FW_EXT_API_VER,
+				sizeof(struct bl_validate_fw_ext_api)),
+	.ext_api = {
+		.bl_validate_firmware = bl_validate_firmware,
+	},
+};
+#endif

@@ -12,10 +12,10 @@
 #include <net/mqtt.h>
 #include <net/socket.h>
 #include <logging/log.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #if defined(CONFIG_BSD_LIBRARY)
-#include "nrf_inbuilt_key.h"
+#include <nrf_socket.h>
 #endif
 
 #if defined(CONFIG_AWS_FOTA)
@@ -26,6 +26,9 @@ LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 #if defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
 #include CONFIG_NRF_CLOUD_CERTIFICATES_FILE
+#if defined(CONFIG_MODEM_KEY_MGMT)
+#include <modem_key_mgmt.h>
+#endif
 #endif /* defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES) */
 
 #if !defined(NRF_CLOUD_CLIENT_ID)
@@ -50,6 +53,15 @@ LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 #define NCT_SHADOW_BASE_TOPIC AWS "%s/shadow"
 #define NCT_SHADOW_BASE_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 7)
 
+/*
+ * Note that this topic is intentionally not using the AWS Shadow get/accepted
+ * topic ("$aws/things/<deviceId>/shadow/get/accepted").
+ * Messages on the AWS topic contain the entire shadow, including metadata and
+ * they can become too large for the modem to handle.
+ * Messages on the topic below are published by nRF Connect for Cloud and
+ * contain only a part of the original message so it can be received by the
+ * device.
+ */
 #define NCT_ACCEPTED_TOPIC "%s/shadow/get/accepted"
 #define NCT_ACCEPTED_TOPIC_LEN (NRF_CLOUD_CLIENT_ID_LEN + 20)
 
@@ -213,8 +225,8 @@ static u32_t dc_send(const struct nct_dc_data *dc_data, u8_t qos)
 	return mqtt_publish(&nct.client, &publish);
 }
 
-static bool strings_compare(const char *s1, const char *s2,
-			    u32_t s1_len, u32_t s2_len)
+static bool strings_compare(const char *s1, const char *s2, u32_t s1_len,
+			    u32_t s2_len)
 {
 	return (strncmp(s1, s2, MIN(s1_len, s2_len))) ? false : true;
 }
@@ -239,10 +251,8 @@ static bool control_channel_topic_match(u32_t list_id,
 
 	for (u32_t index = 0; index < list_size; index++) {
 		if (strings_compare(
-			    topic->topic.utf8,
-			    topic_list[index].topic.utf8,
-			    topic->topic.size,
-			    topic_list[index].topic.size)) {
+			    topic->topic.utf8, topic_list[index].topic.utf8,
+			    topic->topic.size, topic_list[index].topic.size)) {
 			*opcode = nct_cc_rx_opcode_map[index];
 			return true;
 		}
@@ -276,7 +286,7 @@ static int nct_client_id_get(char *id)
 	ret = nrf_close(at_socket_fd);
 	__ASSERT_NO_MSG(ret == 0);
 #else
-	#error Missing NRF_CLOUD_CLIENT_ID
+#error Missing NRF_CLOUD_CLIENT_ID
 #endif /* defined(CONFIG_BSD_LIBRARY) */
 #else
 	memcpy(id, NRF_CLOUD_CLIENT_ID, NRF_CLOUD_CLIENT_ID_LEN + 1);
@@ -324,8 +334,8 @@ static int nct_topics_populate(void)
 	}
 	LOG_DBG("update_delta_topic: %s", log_strdup(update_delta_topic));
 
-	ret = snprintf(update_topic, sizeof(update_topic),
-		       NCT_UPDATE_TOPIC, client_id_buf);
+	ret = snprintf(update_topic, sizeof(update_topic), NCT_UPDATE_TOPIC,
+		       client_id_buf);
 	if (ret != NCT_UPDATE_TOPIC_LEN) {
 		return -ENOMEM;
 	}
@@ -341,10 +351,10 @@ static int nct_topics_populate(void)
 	return 0;
 }
 
-/* Provisions root CA certificate using nrf_inbuilt_key API */
+/* Provisions root CA certificate using modem_key_mgmt API */
 static int nct_provision(void)
 {
-	static sec_tag_t sec_tag_list[] = {CONFIG_NRF_CLOUD_SEC_TAG};
+	static sec_tag_t sec_tag_list[] = { CONFIG_NRF_CLOUD_SEC_TAG };
 
 	nct.tls_config.peer_verify = 2;
 	nct.tls_config.cipher_count = 0;
@@ -361,26 +371,27 @@ static int nct_provision(void)
 		/* Delete certificates */
 		nrf_sec_tag_t sec_tag = CONFIG_NRF_CLOUD_SEC_TAG;
 
-		for (nrf_key_mgnt_cred_type_t type = 0; type < 5; type++) {
-			err = nrf_inbuilt_key_delete(sec_tag, type);
-			LOG_DBG("nrf_inbuilt_key_delete(%lu, %d) => result=%d",
+		for (enum modem_key_mgnt_cred_type_t type = 0; type < 5;
+		     type++) {
+			err = modem_key_mgmt_delete(sec_tag, type);
+			LOG_DBG("modem_key_mgmt_delete(%u, %d) => result = %d",
 				sec_tag, type, err);
 		}
 
 		/* Provision CA Certificate. */
-		err = nrf_inbuilt_key_write(CONFIG_NRF_CLOUD_SEC_TAG,
-					NRF_KEY_MGMT_CRED_TYPE_CA_CHAIN,
-					NRF_CLOUD_CA_CERTIFICATE,
-					strlen(NRF_CLOUD_CA_CERTIFICATE));
+		err = modem_key_mgmt_write(CONFIG_NRF_CLOUD_SEC_TAG,
+					   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
+					   NRF_CLOUD_CA_CERTIFICATE,
+					   strlen(NRF_CLOUD_CA_CERTIFICATE));
 		if (err) {
 			LOG_ERR("NRF_CLOUD_CA_CERTIFICATE err: %d", err);
 			return err;
 		}
 
 		/* Provision Private Certificate. */
-		err = nrf_inbuilt_key_write(
+		err = modem_key_mgmt_write(
 			CONFIG_NRF_CLOUD_SEC_TAG,
-			NRF_KEY_MGMT_CRED_TYPE_PRIVATE_CERT,
+			MODEM_KEY_MGMT_CRED_TYPE_PRIVATE_CERT,
 			NRF_CLOUD_CLIENT_PRIVATE_KEY,
 			strlen(NRF_CLOUD_CLIENT_PRIVATE_KEY));
 		if (err) {
@@ -389,9 +400,9 @@ static int nct_provision(void)
 		}
 
 		/* Provision Public Certificate. */
-		err = nrf_inbuilt_key_write(
+		err = modem_key_mgmt_write(
 			CONFIG_NRF_CLOUD_SEC_TAG,
-			NRF_KEY_MGMT_CRED_TYPE_PUBLIC_CERT,
+			MODEM_KEY_MGMT_CRED_TYPE_PUBLIC_CERT,
 			NRF_CLOUD_CLIENT_PUBLIC_CERTIFICATE,
 			strlen(NRF_CLOUD_CLIENT_PUBLIC_CERTIFICATE));
 		if (err) {
@@ -405,24 +416,23 @@ static int nct_provision(void)
 		int err;
 
 		err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
-			TLS_CREDENTIAL_CA_CERTIFICATE,
-			NRF_CLOUD_CA_CERTIFICATE,
-			sizeof(NRF_CLOUD_CA_CERTIFICATE));
+					 TLS_CREDENTIAL_CA_CERTIFICATE,
+					 NRF_CLOUD_CA_CERTIFICATE,
+					 sizeof(NRF_CLOUD_CA_CERTIFICATE));
 		if (err < 0) {
-			LOG_ERR("Failed to register ca certificate: %d",
-				err);
+			LOG_ERR("Failed to register ca certificate: %d", err);
 			return err;
 		}
 		err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
-			TLS_CREDENTIAL_PRIVATE_KEY,
-			NRF_CLOUD_CLIENT_PRIVATE_KEY,
-			sizeof(NRF_CLOUD_CLIENT_PRIVATE_KEY));
+					 TLS_CREDENTIAL_PRIVATE_KEY,
+					 NRF_CLOUD_CLIENT_PRIVATE_KEY,
+					 sizeof(NRF_CLOUD_CLIENT_PRIVATE_KEY));
 		if (err < 0) {
-			LOG_ERR("Failed to register private key: %d",
-				err);
+			LOG_ERR("Failed to register private key: %d", err);
 			return err;
 		}
-		err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
+		err = tls_credential_add(
+			CONFIG_NRF_CLOUD_SEC_TAG,
 			TLS_CREDENTIAL_SERVER_CERTIFICATE,
 			NRF_CLOUD_CLIENT_PUBLIC_CERTIFICATE,
 			sizeof(NRF_CLOUD_CLIENT_PUBLIC_CERTIFICATE));
@@ -431,7 +441,6 @@ static int nct_provision(void)
 				err);
 			return err;
 		}
-
 	}
 #endif /* defined(CONFIG_BSD_LIBRARY) */
 #endif /* defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES) */
@@ -506,9 +515,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 				 const struct mqtt_evt *_mqtt_evt)
 {
 	int err;
-	struct nct_evt evt = {
-		.status = _mqtt_evt->result
-	};
+	struct nct_evt evt = { .status = _mqtt_evt->result };
 	struct nct_cc_data cc;
 	struct nct_dc_data dc;
 	bool event_notify = false;
@@ -557,9 +564,8 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 		/* If the data arrives on one of the subscribed control channel
 		 * topic. Then we notify the same.
 		 */
-		if (control_channel_topic_match(
-			NCT_RX_LIST, &p->message.topic, &cc.opcode)) {
-
+		if (control_channel_topic_match(NCT_RX_LIST, &p->message.topic,
+						&cc.opcode)) {
 			cc.id = p->message_id;
 			cc.data.ptr = nct.payload_buf;
 			cc.data.len = p->message.payload.len;
@@ -589,9 +595,8 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 		break;
 	}
 	case MQTT_EVT_SUBACK: {
-		LOG_DBG("MQTT_EVT_SUBACK: id=%d result=%d",
-			_mqtt_evt->param.suback.message_id,
-			_mqtt_evt->result);
+		LOG_DBG("MQTT_EVT_SUBACK: id = %d result = %d",
+			_mqtt_evt->param.suback.message_id, _mqtt_evt->result);
 
 		if (_mqtt_evt->param.suback.message_id == NCT_CC_SUBSCRIBE_ID) {
 			evt.type = NCT_EVT_CC_CONNECTED;
@@ -613,17 +618,16 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 		break;
 	}
 	case MQTT_EVT_PUBACK: {
-		LOG_DBG("MQTT_EVT_PUBACK: id=%d result=%d",
-			_mqtt_evt->param.puback.message_id,
-			_mqtt_evt->result);
+		LOG_DBG("MQTT_EVT_PUBACK: id = %d result = %d",
+			_mqtt_evt->param.puback.message_id, _mqtt_evt->result);
 
-		evt.type = NCT_EVT_CC_TX_DATA_CNF;
+		evt.type = NCT_EVT_CC_TX_DATA_ACK;
 		evt.param.data_id = _mqtt_evt->param.puback.message_id;
 		event_notify = true;
 		break;
 	}
 	case MQTT_EVT_DISCONNECT: {
-		LOG_DBG("MQTT_EVT_DISCONNECT: result=%d", _mqtt_evt->result);
+		LOG_DBG("MQTT_EVT_DISCONNECT: result = %d", _mqtt_evt->result);
 
 		evt.type = NCT_EVT_DISCONNECTED;
 		event_notify = true;
@@ -661,8 +665,7 @@ int nct_connect(void)
 {
 	int err;
 
-	struct sockaddr_in *broker =
-		((struct sockaddr_in *)&nct.broker);
+	struct sockaddr_in *broker = ((struct sockaddr_in *)&nct.broker);
 
 	inet_pton(AF_INET, CONFIG_NRF_CLOUD_STATIC_IPV4_ADDR,
 		  &broker->sin_addr);
@@ -705,7 +708,7 @@ int nct_connect(void)
 
 			broker->sin_addr.s_addr =
 				((struct sockaddr_in *)addr->ai_addr)
-				->sin_addr.s_addr;
+					->sin_addr.s_addr;
 			broker->sin_family = AF_INET;
 			broker->sin_port = htons(NRF_CLOUD_PORT);
 
@@ -719,9 +722,9 @@ int nct_connect(void)
 				((struct sockaddr_in6 *)&nct.broker);
 
 			memcpy(broker->sin6_addr.s6_addr,
-				((struct sockaddr_in6 *)addr->ai_addr)
-				->sin6_addr.s6_addr,
-				sizeof(struct in6_addr));
+			       ((struct sockaddr_in6 *)addr->ai_addr)
+				       ->sin6_addr.s6_addr,
+			       sizeof(struct in6_addr));
 			broker->sin6_family = AF_INET6;
 			broker->sin6_port = htons(NRF_CLOUD_PORT);
 
@@ -789,9 +792,8 @@ int nct_cc_send(const struct nct_cc_data *cc_data)
 
 	publish.message_id = cc_data->id ? cc_data->id : ++msg_id;
 
-	LOG_DBG("mqtt_publish: id=%d opcode=%d len=%d",
-		publish.message_id, cc_data->opcode,
-		cc_data->data.len);
+	LOG_DBG("mqtt_publish: id = %d opcode = %d len = %d", publish.message_id,
+		cc_data->opcode, cc_data->data.len);
 
 	int err = mqtt_publish(&nct.client, &publish);
 

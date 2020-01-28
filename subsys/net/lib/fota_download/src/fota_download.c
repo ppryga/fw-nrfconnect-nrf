@@ -114,7 +114,9 @@ static int download_client_callback(const struct download_client_evt *event)
 			download_client_disconnect(&dlc);
 			LOG_ERR("Download client error");
 			err = dfu_target_done(false);
-			if (err != 0) {
+			if (err == -EACCES) {
+				LOG_DBG("No DFU target was initialized");
+			} else if (err != 0) {
 				LOG_ERR("Unable to deinitialze resources "
 					"used by dfu_target.");
 			}
@@ -177,7 +179,7 @@ int fota_download_start(char *host, char *file)
 		return err;
 	}
 
-	bool s0_active = s0.firmware_version >= s1.firmware_version;
+	bool s0_active = s0.version >= s1.version;
 
 	err = dfu_ctx_mcuboot_set_b1_file(file, s0_active, &update);
 	if (err != 0) {

@@ -9,10 +9,16 @@
 #include <atomic.h>
 #include <spinlock.h>
 #include <settings/settings.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <i2c.h>
 #include "bsec_integration.h"
 #include "env_sensors.h"
+
+#define ENV_INIT_DELAY_S (5) /* Polling delay upon initialization */
+#define MAX_INTERVAL_S   (INT_MAX/MSEC_PER_SEC)
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(bsec, CONFIG_ASSET_TRACKER_LOG_LEVEL);
 
 /* @brief Sample rate for the BSEC library
  *
@@ -68,6 +74,11 @@ static struct k_thread thread;
 static u8_t s_state_buffer[BSEC_MAX_STATE_BLOB_SIZE];
 static s32_t s_state_buffer_len;
 
+static struct k_delayed_work env_sensors_poller;
+static env_sensors_data_ready_cb data_ready_cb;
+static u32_t data_send_interval_s = CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL;
+static bool backoff_enabled;
+static bool initialized;
 
 static int settings_set(const char *key, size_t len_rd,
 			settings_read_cb read_cb, void *cb_arg)
@@ -94,14 +105,14 @@ static int enable_settings(void)
 
 	err = settings_register(&my_conf);
 	if (err) {
-		printk("Cannot register settings handler");
+		LOG_ERR("Cannot register settings handler");
 		return err;
 	}
 
 	/* This module loads settings for all application modules */
 	err = settings_load();
 	if (err) {
-		printk("Cannot load settings");
+		LOG_ERR("Cannot load settings");
 		return err;
 	}
 
@@ -229,19 +240,45 @@ int env_sensors_get_air_quality(env_sensor_data_t *sensor_data)
 	return 0;
 }
 
-int env_sensors_init_and_start(void)
+static inline int submit_poll_work(const u32_t delay_s)
+{
+	return k_delayed_work_submit(&env_sensors_poller,
+				     K_SECONDS((u32_t)delay_s));
+}
+
+int env_sensors_poll(void)
+{
+	return initialized ? submit_poll_work(K_NO_WAIT) : -ENXIO;
+}
+
+static void env_sensors_poll_fn(struct k_work *work)
+{
+
+	if (data_send_interval_s == 0) {
+		return;
+	}
+
+	if (data_ready_cb) {
+		data_ready_cb();
+	}
+
+	submit_poll_work(backoff_enabled ?
+		CONFIG_ENVIRONMENT_DATA_BACKOFF_TIME : data_send_interval_s);
+}
+
+int env_sensors_init_and_start(const env_sensors_data_ready_cb cb)
 {
 	return_values_init bsec_ret;
 	int ret;
 
 	i2c_master = device_get_binding("I2C_2");
 	if (!i2c_master) {
-		printk("cannot bind to BME680\n");
+		LOG_ERR("cannot bind to BME680");
 		return -EINVAL;
 	}
 	ret = enable_settings();
 	if (ret) {
-		printk("Cannot enable settings err: %d", ret);
+		LOG_ERR("Cannot enable settings err: %d", ret);
 		return ret;
 	}
 	bsec_ret = bsec_iot_init(BSEC_SAMPLE_RATE, 1.2f, bus_write,
@@ -259,5 +296,42 @@ int env_sensors_init_and_start(void)
 			(k_thread_entry_t)bsec_thread, NULL, NULL, NULL,
 			CONFIG_SYSTEM_WORKQUEUE_PRIORITY, 0, K_NO_WAIT);
 
-	return 0;
+	data_ready_cb = cb;
+
+	k_delayed_work_init(&env_sensors_poller, env_sensors_poll_fn);
+
+	initialized = true;
+
+	return (data_send_interval_s > 0) ?
+		submit_poll_work(ENV_INIT_DELAY_S) : 0;
+}
+
+void env_sensors_set_send_interval(const u32_t interval_s)
+{
+	if (interval_s == data_send_interval_s) {
+		return;
+	}
+
+	data_send_interval_s = MIN(interval_s, MAX_INTERVAL_S);
+
+	if (!initialized) {
+		return;
+	}
+
+	if (data_send_interval_s) {
+		/* restart work for new interval to take effect */
+		env_sensors_poll();
+	} else if (k_delayed_work_remaining_get(&env_sensors_poller) > 0) {
+		k_delayed_work_cancel(&env_sensors_poller);
+	}
+}
+
+u32_t env_sensors_get_send_interval(void)
+{
+	return data_send_interval_s;
+}
+
+void env_sensors_set_backoff_enable(const bool enable)
+{
+	backoff_enabled = enable;
 }

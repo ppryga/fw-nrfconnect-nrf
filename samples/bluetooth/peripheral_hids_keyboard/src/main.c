@@ -8,8 +8,8 @@
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <misc/printk.h>
-#include <misc/byteorder.h>
+#include <sys/printk.h>
+#include <sys/byteorder.h>
 #include <zephyr.h>
 #include <gpio.h>
 #include <soc.h>
@@ -511,32 +511,6 @@ static void hid_init(void)
 	__ASSERT(err == 0, "HIDS initialization failed\n");
 }
 
-
-static void bt_ready(int err)
-{
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-		return;
-	}
-
-	printk("Bluetooth initialized\n");
-
-	hid_init();
-
-	if (IS_ENABLED(CONFIG_SETTINGS)) {
-		settings_load();
-	}
-
-#if CONFIG_NFC_OOB_PAIRING
-	k_work_init(&adv_work, delayed_advertising_start);
-	app_nfc_init();
-#else
-	advertising_start();
-#endif
-
-	k_work_init(&pairing_work, pairing_process);
-}
-
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -959,11 +933,28 @@ void main(void)
 	bt_conn_cb_register(&conn_callbacks);
 	bt_conn_auth_cb_register(&conn_auth_callbacks);
 
-	err = bt_enable(bt_ready);
+	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 		return;
 	}
+
+	printk("Bluetooth initialized\n");
+
+	hid_init();
+
+	if (IS_ENABLED(CONFIG_SETTINGS)) {
+		settings_load();
+	}
+
+#if CONFIG_NFC_OOB_PAIRING
+	k_work_init(&adv_work, delayed_advertising_start);
+	app_nfc_init();
+#else
+	advertising_start();
+#endif
+
+	k_work_init(&pairing_work, pairing_process);
 
 	for (;;) {
 		if (is_adv) {

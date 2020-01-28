@@ -33,9 +33,9 @@ LOG_MODULE_REGISTER(at_host, CONFIG_SLM_LOG_LEVEL);
 
 #define SLM_SYNC_STR "Ready\r\n"
 
-#define AT_CMD_SLMVER_U	"AT#XSLMVER"
-#define AT_CMD_SLMVER_L	"at#xslmver"
-#define SLM_VERSION	"#XSLMVER: 1.0\r\n"
+#define AT_CMD_SLMVER	"AT#XSLMVER"
+#define SLM_VERSION	"#XSLMVER: 1.1\r\n"
+#define AT_CMD_SLEEP	"AT#XSLEEP"
 
 #define AT_MAX_CMD_LEN		CONFIG_AT_CMD_RESPONSE_MAX_LEN
 
@@ -63,6 +63,13 @@ static size_t at_buf_len;
 static struct k_work cmd_send_work;
 static const char termination[3] = { '\0', '\r', '\n' };
 
+/* global variable defined in different files */
+extern struct at_param_list m_param_list;
+extern void enter_sleep(u16_t mode);
+
+/* forward declaration */
+void slm_at_host_uninit(void);
+
 static inline void write_uart_string(char *str, size_t len)
 {
 	LOG_HEXDUMP_DBG(str, len, "TX");
@@ -84,6 +91,46 @@ static void response_handler(void *context, char *response)
 	}
 }
 
+static int handle_at_sleep(const char *at_cmd)
+{
+	int ret = -EINVAL;
+	enum at_cmd_type type;
+	u16_t shutdown_mode;
+
+	ret = at_parser_params_from_str(at_cmd, NULL, &m_param_list);
+	if (ret < 0) {
+		LOG_ERR("Failed to parse AT command %d", ret);
+		return -EINVAL;
+	}
+
+	type = at_parser_cmd_type_get(at_cmd);
+	if (type == AT_CMD_TYPE_SET_COMMAND) {
+		if (at_params_valid_count_get(&m_param_list) < 2) {
+			LOG_ERR("AT parameter error");
+			return -EINVAL;
+		}
+		ret = at_params_short_get(&m_param_list, 1, &shutdown_mode);
+		if (ret < 0) {
+			LOG_ERR("AT parameter error");
+			return -EINVAL;
+		}
+		switch (shutdown_mode) {
+		case SHUTDOWN_APP_MODEM:
+		case SHUTDOWN_APP_ONLY:
+			slm_at_host_uninit();
+			/* fall over */
+		case SHUTDOWN_MODEM_ONLY:
+			enter_sleep(shutdown_mode);
+			return 0;
+		default:
+			LOG_ERR("AT parameter error");
+			return -EINVAL;
+		}
+	}
+
+	return ret;
+}
+
 static void cmd_send(struct k_work *work)
 {
 	size_t chars;
@@ -91,7 +138,7 @@ static void cmd_send(struct k_work *work)
 	static char buf[AT_MAX_CMD_LEN];
 	enum at_cmd_state state;
 	int err;
-	size_t size_slmver = sizeof(AT_CMD_SLMVER_U) - 1;
+	size_t size_cmd = sizeof(AT_CMD_SLMVER) - 1;
 
 	ARG_UNUSED(work);
 
@@ -100,15 +147,26 @@ static void cmd_send(struct k_work *work)
 
 	LOG_HEXDUMP_DBG(at_buf, at_buf_len, "RX");
 
-	if (strncmp(at_buf, AT_CMD_SLMVER_U, size_slmver) == 0 ||
-		strncmp(at_buf, AT_CMD_SLMVER_L, size_slmver) == 0) {
+	if (slm_at_cmd_cmp(at_buf, AT_CMD_SLMVER, size_cmd)) {
 		write_uart_string(SLM_VERSION, sizeof(SLM_VERSION));
 		write_uart_string(OK_STR, sizeof(OK_STR));
 		goto done;
 	}
 
+	size_cmd = sizeof(AT_CMD_SLEEP) - 1;
+	if (slm_at_cmd_cmp(at_buf, AT_CMD_SLEEP, size_cmd)) {
+		err = handle_at_sleep(at_buf);
+		if (err == 0) {
+			write_uart_string(OK_STR, sizeof(OK_STR));
+			goto done;
+		} else {
+			write_uart_string(ERROR_STR, sizeof(ERROR_STR));
+			goto done;
+		}
+	}
+
 #if defined(CONFIG_SLM_TCPIP_AT_MODE)
-	err = slm_at_tcpip_parse(at_buf, at_buf_len);
+	err = slm_at_tcpip_parse(at_buf);
 	if (err == 0) {
 		write_uart_string(OK_STR, sizeof(OK_STR));
 		goto done;
@@ -119,7 +177,7 @@ static void cmd_send(struct k_work *work)
 #endif /** CONFIG_SLM_TCPIP_AT_MODE */
 
 #if defined(CONFIG_SLM_GPS_AT_MODE)
-	err = slm_at_gps_parse(at_buf, at_buf_len);
+	err = slm_at_gps_parse(at_buf);
 	if (err == 0) {
 		write_uart_string(OK_STR, sizeof(OK_STR));
 		goto done;
@@ -347,4 +405,36 @@ int slm_at_host_init(void)
 #endif
 	LOG_DBG("at_host init done");
 	return err;
+}
+
+void slm_at_host_uninit(void)
+{
+	int err;
+
+#if defined(CONFIG_SLM_TCPIP_AT_MODE)
+	/* Uninitialize the TCPIP module */
+	err = slm_at_tcpip_uninit();
+	if (err) {
+		LOG_WRN("TCPIP could not be uninitialized: %d", err);
+	}
+#endif
+#if defined(CONFIG_SLM_GPS_AT_MODE)
+	/* Uninitialize the GPS module */
+	err = slm_at_gps_uninit();
+	if (err) {
+		LOG_WRN("GPS could not be uninitialized: %d", err);
+	}
+#endif
+	err = at_notif_deregister_handler(NULL, response_handler);
+	if (err != 0) {
+		LOG_WRN("Can't deregister handler err=%d", err);
+	}
+#if defined(CONFIG_DEVICE_POWER_MANAGEMENT)
+	err = device_set_power_state(uart_dev, DEVICE_PM_OFF_STATE,
+				NULL, NULL);
+	if (err != 0) {
+		LOG_WRN("Can't power off uart err=%d", err);
+	}
+#endif
+	LOG_DBG("at_host uninit done");
 }

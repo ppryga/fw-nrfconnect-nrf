@@ -49,42 +49,35 @@ enum cloud_qos {
 };
 
 /**@brief Cloud endpoint type. */
-enum cloud_endpoint {
+enum cloud_endpoint_type {
 	CLOUD_EP_TOPIC_MSG,
 	CLOUD_EP_TOPIC_STATE,
+	CLOUD_EP_TOPIC_STATE_DELETE,
 	CLOUD_EP_TOPIC_CONFIG,
 	CLOUD_EP_TOPIC_PAIR,
 	CLOUD_EP_TOPIC_BATCH,
 	CLOUD_EP_URI,
-	CLOUD_EP_COUNT
-};
-
-/**@brief Cloud pairing type. */
-enum cloud_pair_type {
-	CLOUD_PAIR_SEQUENCE,
-	CLOUD_PAIR_PIN,
-};
-
-/**@brief Cloud pairing data. */
-struct cloud_pair_data {
-	enum cloud_pair_type type;
-	u8_t *buf;
-	size_t len;
+	CLOUD_EP_COMMON_COUNT,
+	CLOUD_EP_PRIV_START = CLOUD_EP_COMMON_COUNT,
+	CLOUD_EP_PRIV_END = INT16_MAX
 };
 
 /** @brief Forward declaration of cloud backend type. */
 struct cloud_backend;
+
+/** @brief Cloud endpoint data. */
+struct cloud_endpoint {
+	enum cloud_endpoint_type type;
+	char *str;
+	size_t len;
+};
 
 /**@brief Cloud message type. */
 struct cloud_msg {
 	char *buf;
 	size_t len;
 	enum cloud_qos qos;
-	struct {
-		enum cloud_endpoint type;
-		char *str;
-		size_t len;
-	} endpoint;
+	struct cloud_endpoint endpoint;
 };
 
 /**@brief Cloud event type. */
@@ -93,7 +86,6 @@ struct cloud_event {
 	union {
 		struct cloud_msg msg;
 		int err;
-		struct cloud_pair_data pair_info;
 	} data;
 };
 
@@ -124,6 +116,13 @@ struct cloud_api {
 		    const struct cloud_msg *const msg);
 	int (*ping)(const struct cloud_backend *const backend);
 	int (*input)(const struct cloud_backend *const backend);
+	int (*ep_subscriptions_add)(const struct cloud_backend *const backend,
+				    const struct cloud_endpoint *const list,
+				    size_t list_count);
+	int (*ep_subscriptions_remove)(
+				const struct cloud_backend *const backend,
+				const struct cloud_endpoint *const list,
+				size_t list_count);
 	int (*user_data_set)(const struct cloud_backend *const backend,
 			     void *user_data);
 };
@@ -134,6 +133,8 @@ struct cloud_backend_config {
 	cloud_evt_handler_t handler;
 	int socket;
 	void *user_data;
+	char *id;
+	size_t id_len;
 };
 
 /**@brief Structure for cloud backend. */
@@ -149,13 +150,11 @@ struct cloud_backend {
  * @param backend Pointer to cloud backend structure.
  * @param handler Handler to receive events from the backend.
  */
-static inline int cloud_init(
-	struct cloud_backend *const backend,
-	cloud_evt_handler_t handler)
+static inline int cloud_init(struct cloud_backend *const backend,
+							 cloud_evt_handler_t handler)
 {
-	if (backend == NULL
-	    || backend->api == NULL
-	    || backend->api->init == NULL) {
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->init == NULL) {
 		return -ENOTSUP;
 	}
 
@@ -173,9 +172,8 @@ static inline int cloud_init(
  */
 static inline int cloud_uninit(const struct cloud_backend *const backend)
 {
-	if (backend == NULL
-	    || backend->api == NULL
-	    || backend->api->uninit == NULL) {
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->uninit == NULL) {
 		return -ENOTSUP;
 	}
 
@@ -195,9 +193,8 @@ static inline int cloud_uninit(const struct cloud_backend *const backend)
  */
 static inline int cloud_connect(const struct cloud_backend *const backend)
 {
-	if (backend == NULL
-	    || backend->api == NULL
-	    || backend->api->connect == NULL) {
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->connect == NULL) {
 		return -ENOTSUP;
 	}
 
@@ -212,9 +209,8 @@ static inline int cloud_connect(const struct cloud_backend *const backend)
  */
 static inline int cloud_disconnect(const struct cloud_backend *const backend)
 {
-	if (backend == NULL
-	    || backend->api == NULL
-	    || backend->api->disconnect == NULL) {
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->disconnect == NULL) {
 		return -ENOTSUP;
 	}
 
@@ -231,9 +227,8 @@ static inline int cloud_disconnect(const struct cloud_backend *const backend)
 static inline int cloud_send(const struct cloud_backend *const backend,
 			     struct cloud_msg *msg)
 {
-	if (backend == NULL
-	    || backend->api == NULL
-	    || backend->api->send == NULL) {
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->send == NULL) {
 		return -ENOTSUP;
 	}
 
@@ -272,13 +267,48 @@ static inline int cloud_ping(const struct cloud_backend *const backend)
  */
 static inline int cloud_input(const struct cloud_backend *const backend)
 {
-	if (backend == NULL
-	    || backend->api == NULL
-	    || backend->api->input == NULL) {
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->input == NULL) {
 		return -ENOTSUP;
 	}
 
 	return backend->api->input(backend);
+}
+
+/**@brief Add Cloud endpoint subscriptions.
+ *
+ * @param backend Pointer to cloud backend structure.
+ * @param list Pointer to a list of endpoint subscriptions.
+ * @param list_count Number of entries in the endpoint subscription list.
+ */
+static inline int cloud_ep_subscriptions_add(
+			const struct cloud_backend *const backend,
+			const struct cloud_endpoint *list, size_t list_count)
+{
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->ep_subscriptions_add == NULL) {
+		return -ENOTSUP;
+	}
+
+	return backend->api->ep_subscriptions_add(backend, list, list_count);
+}
+
+/**@brief Remove Cloud endpoint subscriptions.
+ *
+ * @param backend Pointer to cloud backend structure.
+ * @param list Pointer to a list of endpoint subscriptions.
+ * @param list_count Number of entries in the endpoint subscriptions list.
+ */
+static inline int cloud_ep_subscriptions_remove(
+			const struct cloud_backend *const backend,
+			const struct cloud_endpoint *list, size_t list_count)
+{
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->ep_subscriptions_remove == NULL) {
+		return -ENOTSUP;
+	}
+
+	return backend->api->ep_subscriptions_remove(backend, list, list_count);
 }
 
 /**@brief Set the user-defined data that is passed as an argument to cloud event
@@ -291,9 +321,8 @@ static inline int cloud_input(const struct cloud_backend *const backend)
 static inline int cloud_user_data_set(struct cloud_backend *const backend,
 				      void *user_data)
 {
-	if (backend == NULL
-	    || backend->api == NULL
-	    || backend->api->user_data_set == NULL) {
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->user_data_set == NULL) {
 		return -ENOTSUP;
 	}
 

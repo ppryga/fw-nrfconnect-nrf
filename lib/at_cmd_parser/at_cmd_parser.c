@@ -15,7 +15,7 @@
 #include <at_cmd_parser/at_cmd_parser.h>
 #include "at_utils.h"
 
-#define AT_CMD_MAX_ARRAY_SIZE           32
+#define AT_CMD_MAX_ARRAY_SIZE 32
 
 enum at_parser_state {
 	IDLE,
@@ -37,15 +37,25 @@ static inline void set_new_state(enum at_parser_state new_state)
 
 static inline void reset_state(void)
 {
-	state      = IDLE;
+	state = IDLE;
+}
+
+static inline void skip_command_prefix(const char **cmd)
+{
+	*cmd += sizeof("AT") - 1;
+
+	if (is_lfcr(**cmd) || is_terminated(**cmd)) {
+		return;
+	}
+
+	(*cmd)++;
 }
 
 static int at_parse_detect_type(const char **str, int index)
 {
 	const char *tmpstr = *str;
 
-	if ((index == 0) &&
-	    is_notification(*tmpstr)) {
+	if ((index == 0) && is_notification(*tmpstr)) {
 		/* Only first parameter in the string can be
 		 * notification ID, (eg +CEREG:)
 		 */
@@ -59,8 +69,7 @@ static int at_parse_detect_type(const char **str, int index)
 		 * parameter
 		 */
 		set_new_state(STRING);
-	} else if ((index > 0) &&
-		is_notification(*tmpstr)) {
+	} else if ((index > 0) && is_notification(*tmpstr)) {
 		/* If notifications is detected later in the
 		 * string we should stop parsing and return
 		 * EAGAIN
@@ -76,8 +85,7 @@ static int at_parse_detect_type(const char **str, int index)
 	} else if (is_array_start(*tmpstr)) {
 		set_new_state(ARRAY);
 		tmpstr++;
-	} else if (is_lfcr(*tmpstr) &&
-		  (state == NUMBER)) {
+	} else if (is_lfcr(*tmpstr) && (state == NUMBER)) {
 		/* If \n or \r is detected in the string and the
 		 * previous param was a number we assume the
 		 * next parameter is PDU data
@@ -88,8 +96,7 @@ static int at_parse_detect_type(const char **str, int index)
 		}
 
 		set_new_state(SMS_PDU);
-	} else if (is_lfcr(*tmpstr) &&
-		   (state == OPTIONAL)) {
+	} else if (is_lfcr(*tmpstr) && (state == OPTIONAL)) {
 		set_new_state(OPTIONAL);
 	} else if (is_separator(*tmpstr)) {
 		/* If a separator is detected we have detected
@@ -108,8 +115,7 @@ static int at_parse_detect_type(const char **str, int index)
 	return 0;
 }
 
-static int at_parse_process_element(const char **str,
-				    int index,
+static int at_parse_process_element(const char **str, int index,
 				    struct at_param_list *const list)
 {
 	const char *tmpstr = *str;
@@ -125,13 +131,12 @@ static int at_parse_process_element(const char **str,
 			tmpstr++;
 		}
 
-		at_params_string_put(list,
-				     index, start_ptr,
+		at_params_string_put(list, index, start_ptr,
 				     tmpstr - start_ptr);
 	} else if (state == COMMAND) {
 		const char *start_ptr = tmpstr;
 
-		tmpstr += sizeof("AT+") - 1;
+		skip_command_prefix(&tmpstr);
 
 		while (is_valid_notification_char(*tmpstr)) {
 			tmpstr++;
@@ -139,38 +144,42 @@ static int at_parse_process_element(const char **str,
 
 		at_params_string_put(list, index, start_ptr,
 				     tmpstr - start_ptr);
+
+		/* Skip read/test special characters. */
+		if ((*tmpstr == AT_CMD_SEPARATOR) &&
+		    (*(tmpstr + 1) == AT_CMD_READ_TEST_IDENTIFIER)) {
+			tmpstr += 2;
+		} else if (*tmpstr == AT_CMD_READ_TEST_IDENTIFIER) {
+			tmpstr++;
+		}
+
 	} else if (state == OPTIONAL) {
 		at_params_empty_put(list, index);
 
 	} else if (state == STRING) {
 		const char *start_ptr = tmpstr;
 
-		while (!is_dblquote(*tmpstr) &&
-		       !is_terminated(*tmpstr) &&
+		while (!is_dblquote(*tmpstr) && !is_terminated(*tmpstr) &&
 		       !is_lfcr(*tmpstr)) {
 			tmpstr++;
 		}
 
-		at_params_string_put(list,
-				     index,
-				     start_ptr, tmpstr - start_ptr);
+		at_params_string_put(list, index, start_ptr,
+				     tmpstr - start_ptr);
 
 		tmpstr++;
-
 	} else if (state == ARRAY) {
 		char *next;
 		size_t i = 0;
-		u32_t  tmparray[AT_CMD_MAX_ARRAY_SIZE];
+		u32_t tmparray[AT_CMD_MAX_ARRAY_SIZE];
 
 		tmparray[i++] = (u32_t)strtoul(tmpstr, &next, 10);
 		tmpstr = next;
 
-		while (!is_array_stop(*tmpstr) &&
-		       !is_terminated(*tmpstr)) {
-
+		while (!is_array_stop(*tmpstr) && !is_terminated(*tmpstr)) {
 			if (is_separator(*tmpstr)) {
 				tmparray[i++] =
-				      (u32_t)strtoul(++tmpstr, &next, 10);
+					(u32_t)strtoul(++tmpstr, &next, 10);
 
 				if (strlen(tmpstr) == strlen(next)) {
 					break;
@@ -187,9 +196,7 @@ static int at_parse_process_element(const char **str,
 			}
 		}
 
-		at_params_array_put(list, index,
-				    tmparray,
-				    i * sizeof(u32_t));
+		at_params_array_put(list, index, tmparray, i * sizeof(u32_t));
 
 		tmpstr++;
 	} else if (state == NUMBER) {
@@ -211,9 +218,8 @@ static int at_parse_process_element(const char **str,
 			tmpstr++;
 		}
 
-		at_params_string_put(list,
-				     index,
-				     start_ptr, tmpstr - start_ptr);
+		at_params_string_put(list, index, start_ptr,
+				     tmpstr - start_ptr);
 	}
 
 	*str = tmpstr;
@@ -234,9 +240,7 @@ static int at_parse_param(const char **at_params_str,
 
 	reset_state();
 
-	while ((!is_terminated(*str)) &&
-	       (index < max_params)) {
-
+	while ((!is_terminated(*str)) && (index < max_params)) {
 		if (isspace(*str)) {
 			str++;
 		}
@@ -250,7 +254,7 @@ static int at_parse_param(const char **at_params_str,
 		}
 
 		if (is_separator(*str)) {
-			if (is_lfcr(*(str+1))) {
+			if (is_lfcr(*(str + 1))) {
 				/* Make sure we catch the last empty parameter
 				 **/
 				index++;
@@ -264,8 +268,7 @@ static int at_parse_param(const char **at_params_str,
 					break;
 				}
 
-				if (at_parse_process_element(&str,
-							     index,
+				if (at_parse_process_element(&str, index,
 							     list) == -1) {
 					break;
 				}
@@ -281,8 +284,7 @@ static int at_parse_param(const char **at_params_str,
 			while (is_lfcr(str[++i])) {
 			}
 
-			if (is_terminated(str[i]) ||
-			    is_notification(str[i])) {
+			if (is_terminated(str[i]) || is_notification(str[i])) {
 				str += i;
 				break;
 			}
@@ -293,7 +295,6 @@ static int at_parse_param(const char **at_params_str,
 		if (index == max_params) {
 			oversized = true;
 		}
-
 	}
 
 	*at_params_str = str;
@@ -309,25 +310,21 @@ static int at_parse_param(const char **at_params_str,
 	return 0;
 }
 
-int at_parser_params_from_str(const char *at_params_str,
-			      char **next_params_str,
-			      struct at_param_list * const list)
+int at_parser_params_from_str(const char *at_params_str, char **next_params_str,
+			      struct at_param_list *const list)
 {
-	return at_parser_max_params_from_str(at_params_str,
-					     next_params_str,
-					     list,
-					     list->param_count);
+	return at_parser_max_params_from_str(at_params_str, next_params_str,
+					     list, list->param_count);
 }
 
 int at_parser_max_params_from_str(const char *at_params_str,
 				  char **next_param_str,
-				  struct at_param_list * const list,
+				  struct at_param_list *const list,
 				  size_t max_params_count)
 {
 	int err = 0;
 
-	if (at_params_str == NULL ||
-	    list == NULL || list->params == NULL) {
+	if (at_params_str == NULL || list == NULL || list->params == NULL) {
 		return -EINVAL;
 	}
 
@@ -342,4 +339,33 @@ int at_parser_max_params_from_str(const char *at_params_str,
 	}
 
 	return err;
+}
+
+enum at_cmd_type at_parser_cmd_type_get(const char *at_cmd)
+{
+	enum at_cmd_type type;
+
+	if (!is_command(at_cmd)) {
+		return AT_CMD_TYPE_UNKNOWN;
+	}
+
+	skip_command_prefix(&at_cmd);
+
+	while (is_valid_notification_char(*at_cmd)) {
+		at_cmd++;
+	}
+
+	if ((*at_cmd == AT_CMD_SEPARATOR) &&
+	    (*(at_cmd + 1) == AT_CMD_READ_TEST_IDENTIFIER)) {
+		type = AT_CMD_TYPE_TEST_COMMAND;
+	} else if (*at_cmd == AT_CMD_READ_TEST_IDENTIFIER) {
+		type = AT_CMD_TYPE_READ_COMMAND;
+	} else if ((*at_cmd == AT_CMD_SEPARATOR) || is_lfcr(*at_cmd) ||
+		   is_terminated(*at_cmd)) {
+		type = AT_CMD_TYPE_SET_COMMAND;
+	} else {
+		type = AT_CMD_TYPE_UNKNOWN;
+	}
+
+	return type;
 }

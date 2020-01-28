@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Nordic Semiconductor ASA
+ * Copyright (c) 2018 - 2020 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
@@ -9,7 +9,7 @@
 #include <irq.h>
 #include <kernel.h>
 #include <soc.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <stdbool.h>
 
 #include <ble_controller.h>
@@ -20,18 +20,10 @@
 #define LOG_MODULE_NAME bt_ctlr_hci_driver
 #include "common/log.h"
 
-#define BLE_CONTROLLER_IRQ_PRIO_LOW  4
-#define BLE_CONTROLLER_IRQ_PRIO_HIGH 0
-
 static K_SEM_DEFINE(sem_recv, 0, 1);
-static K_SEM_DEFINE(sem_signal, 0, UINT_MAX);
 
 static struct k_thread recv_thread_data;
-static struct k_thread signal_thread_data;
 static K_THREAD_STACK_DEFINE(recv_thread_stack, CONFIG_BLECTLR_RX_STACK_SIZE);
-static K_THREAD_STACK_DEFINE(signal_thread_stack,
-			     CONFIG_BLECTLR_SIGNAL_STACK_SIZE);
-
 
 /* It should not be possible to set CONFIG_BLECTRL_SLAVE_COUNT larger than
  * CONFIG_BT_MAX_CONN. Kconfig should make sure of that, this assert is to
@@ -74,15 +66,22 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_PERIPHERAL) ||
 
 static u8_t ble_controller_mempool[MEMPOOL_SIZE];
 
+#if IS_ENABLED(CONFIG_BT_CTLR_ASSERT_HANDLER)
+extern void bt_ctlr_assert_handle(char *file, u32_t line);
+
 void blectlr_assertion_handler(const char *const file, const u32_t line)
 {
-#ifdef CONFIG_BT_CTLR_ASSERT_HANDLER
-	bt_ctlr_assert_handle(file, line);
-#else
+	bt_ctlr_assert_handle((char *) file, line);
+}
+
+#else /* !IS_ENABLED(CONFIG_BT_CTLR_ASSERT_HANDLER) */
+void blectlr_assertion_handler(const char *const file, const u32_t line)
+{
 	BT_ERR("BleCtlr ASSERT: %s, %d", log_strdup(file), line);
 	k_oops();
-#endif
 }
+#endif /* IS_ENABLED(CONFIG_BT_CTLR_ASSERT_HANDLER) */
+
 
 static int cmd_handle(struct net_buf *cmd)
 {
@@ -300,18 +299,6 @@ static void recv_thread(void *p1, void *p2, void *p3)
 	}
 }
 
-static void signal_thread(void *p1, void *p2, void *p3)
-{
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
-
-	while (true) {
-		k_sem_take(&sem_signal, K_FOREVER);
-		ble_controller_low_prio_tasks_process();
-	}
-}
-
 static int hci_driver_open(void)
 {
 	BT_DBG("Open");
@@ -343,11 +330,6 @@ void host_signal(void)
 	k_sem_give(&sem_recv);
 }
 
-void SIGNALLING_Handler(void)
-{
-	k_sem_give(&sem_signal);
-}
-
 u8_t bt_read_static_addr(bt_addr_le_t *addr)
 {
 	if (((NRF_FICR->DEVICEADDR[0] != UINT32_MAX) ||
@@ -371,51 +353,8 @@ u8_t bt_read_static_addr(bt_addr_le_t *addr)
 static int ble_init(struct device *unused)
 {
 	int err = 0;
-	nrf_lf_clock_cfg_t clock_cfg;
 
-#ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC
-	clock_cfg.lf_clk_source = NRF_LF_CLOCK_SRC_RC;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL
-	clock_cfg.lf_clk_source = NRF_LF_CLOCK_SRC_XTAL;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH
-	clock_cfg.lf_clk_source = NRF_LF_CLOCK_SRC_SYNTH;
-#else
-#error "Clock source is not defined"
-#endif
-
-#ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_500PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_500_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_250PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_250_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_150PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_150_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_100PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_100_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_75PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_75_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_50PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_50_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_30PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_30_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_20PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_20_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_10PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_10_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_5PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_5_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_2PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_2_PPM;
-#elif CONFIG_CLOCK_CONTROL_NRF_K32SRC_1PPM
-	clock_cfg.accuracy = NRF_LF_CLOCK_ACCURACY_1_PPM;
-#else
-#error "Clock accuracy is not defined"
-#endif
-	clock_cfg.rc_ctiv = BLE_CONTROLLER_RECOMMENDED_RC_CTIV;
-	clock_cfg.rc_temp_ctiv = BLE_CONTROLLER_RECOMMENDED_RC_TEMP_CTIV;
-
-	err = ble_controller_init(blectlr_assertion_handler,
-				  &clock_cfg,
-				  SWI5_IRQn);
+	err = ble_controller_init(blectlr_assertion_handler);
 	return err;
 }
 
@@ -480,6 +419,13 @@ static int ble_enable(void)
 		return -ENOMEM;
 	}
 
+	if (IS_ENABLED(CONFIG_BT_DATA_LEN_UPDATE)) {
+		err = ble_controller_support_dle();
+		if (err) {
+			return -ENOTSUP;
+		}
+	}
+
 	err = MULTITHREADING_LOCK_ACQUIRE();
 	if (!err) {
 		err = ble_controller_enable(host_signal,
@@ -489,18 +435,6 @@ static int ble_enable(void)
 	if (err < 0) {
 		return err;
 	}
-
-	/* Start processing software interrupts. This enables, e.g., the flash
-	 * API to work without having to call bt_enable(), which in turn calls
-	 * hci_driver_open().
-	 *
-	 * FIXME: Here we possibly start dynamic behavior during initialization,
-	 * which in general is a bad thing.
-	 */
-	k_thread_create(&signal_thread_data, signal_thread_stack,
-			K_THREAD_STACK_SIZEOF(signal_thread_stack),
-			signal_thread, NULL, NULL, NULL,
-			K_PRIO_COOP(CONFIG_BLECTLR_PRIO), 0, K_NO_WAIT);
 
 	return 0;
 }
@@ -519,19 +453,8 @@ static int hci_driver_init(struct device *unused)
 		return err;
 	}
 
-	IRQ_DIRECT_CONNECT(RADIO_IRQn, BLE_CONTROLLER_IRQ_PRIO_HIGH,
-			   ble_controller_RADIO_IRQHandler, IRQ_ZERO_LATENCY);
-	IRQ_DIRECT_CONNECT(RTC0_IRQn, BLE_CONTROLLER_IRQ_PRIO_HIGH,
-			   ble_controller_RTC0_IRQHandler, IRQ_ZERO_LATENCY);
-	IRQ_DIRECT_CONNECT(TIMER0_IRQn, BLE_CONTROLLER_IRQ_PRIO_HIGH,
-			   ble_controller_TIMER0_IRQHandler, IRQ_ZERO_LATENCY);
-
-	IRQ_CONNECT(SWI5_IRQn, BLE_CONTROLLER_IRQ_PRIO_LOW,
-		    SIGNALLING_Handler, NULL, 0);
-
-
 	return 0;
 }
 
 SYS_INIT(hci_driver_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
-SYS_INIT(ble_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+SYS_INIT(ble_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

@@ -20,12 +20,11 @@
  * @brief GPS AT command parser.
  *
  * @param at_cmd  AT command string.
- * @param param   Length of string.
  *
  * @retval 0 If the operation was successful.
  *           Otherwise, a (negative) error code is returned.
  */
-int slm_at_gps_parse(const u8_t *at_cmd, u8_t length);
+int slm_at_gps_parse(const char *at_cmd);
 
 /**
  * @brief Initialize GPS AT command parser.
@@ -36,6 +35,14 @@ int slm_at_gps_parse(const u8_t *at_cmd, u8_t length);
  *           Otherwise, a (negative) error code is returned.
  */
 int slm_at_gps_init(at_cmd_handler_t callback);
+
+/**
+ * @brief Uninitialize GPS AT command parser.
+ *
+ * @retval 0 If the operation was successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+int slm_at_gps_uninit(void);
 
 /** @} */
 

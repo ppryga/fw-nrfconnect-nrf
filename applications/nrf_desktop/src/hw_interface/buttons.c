@@ -10,7 +10,7 @@
 #include <soc.h>
 #include <device.h>
 #include <gpio.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #include "key_id.h"
 #include "gpio_pins.h"
@@ -293,6 +293,7 @@ static void scan_fn(struct k_work *work)
 		}
 
 		any_pressed = any_pressed ||
+			      (prev_state[i] != 0) ||
 			      (settled_state[i] != 0) ||
 			      (cur_state[i] != 0);
 	}

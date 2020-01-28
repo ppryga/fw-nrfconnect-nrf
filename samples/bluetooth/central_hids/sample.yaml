@@ -1,13 +1,13 @@
 sample:
-  description: TBD
-  name: TBD
+  name: BLE Central HIDS
+  description: Bluetooth Low Energy central Human Interface Device sample
 tests:
   test:
-    arch_whitelist: x86
+    platform_whitelist: nrf51_pca10028 nrf52_pca10040 nrf52840_pca10056
     harness: bluetooth
     tags: bluetooth
   test_build:
     build_only: true
     build_on_all: true
-    platform_whitelist: nrf51_pca10028 nrf52_pca10040 nrf52840_pca10056 nrf52810_pca10040
+    platform_whitelist: nrf51_pca10028 nrf52_pca10040 nrf52840_pca10056
     tags: bluetooth ci_build

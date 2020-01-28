@@ -6,11 +6,14 @@ nRF9160: Serial LTE Modem
 The Serial LTE Modem (SLM) sample demostrates sending AT commands between a host and a client device.
 An nRF9160 DK is used as the host, while the client can be simulated using either a PC or an nRF52 DK.
 
-This sample is an enhancement to the at_client sample. It provides the following features:
+This sample is an enhancement to the :ref:`at_client_sample` sample.
+It provides the following features:
 
- * Support for TCP/IP proprietary AT commands.
- * Support for GPS proprietary AT commands.
- * Support for communication to external MCU over UART.
+ * Support for generic proprietary AT commands
+ * Support for TCP/IP proprietary AT commands
+ * Support for UDP proprietary AT commands
+ * Support for GPS proprietary AT commands
+ * Support for communication to external MCU over UART
 
 All nRF91 modem AT commands are also supported.
 
@@ -19,7 +22,7 @@ Requirements
 
 * The following development board:
 
-    * nRF9160 DK board (PCA10090)
+    * |nRF9160DK|
 
 * If the client is a PC:
 
@@ -27,8 +30,8 @@ Requirements
 
 * If the client is an nRF52 device:
 
-    * nRF52840 DK board (PCA10056)
-    * nRF52832 DK board (PCA10040)
+    * |nRF52840DK|
+    * |nRF52DK|
 
 .. terminal_config
 
@@ -51,7 +54,8 @@ Terminal serial configuration:
 External MCU configuration
 ==========================
 
-To work with external MCU (nRF52), you must set the configuration option ``CONFIG_SLM_CONNECT_UART_2``.
+To work with the external MCU (nRF52), you must set the configuration options ``CONFIG_SLM_GPIO_WAKEUP`` and ``CONFIG_SLM_CONNECT_UART_2``.
+
 The pin interconnection between nRF91 and nRF52 is presented in the following table:
 
 .. list-table::
@@ -67,7 +71,7 @@ The pin interconnection between nRF91 and nRF52 is presented in the following ta
    * - UART CTS P0.7
      - UART RTS P0.12
    * - UART RTS P0.5
-     - UART RTS P0.13
+     - UART CTS P0.13
    * - GPIO OUT P0.27
      - GPIO IN P0.31
 
@@ -85,26 +89,41 @@ UART configuration:
 
 Note that the GPIO output level on nRF91 side should be 3 V.
 
+Generic commands
+****************
+
+The following proprietary generic AT commands are used in this sample:
+
+* AT#XSLMVER
+* AT#XSLEEP=<mode>
+
 TCP/IP AT commands
 ******************
 
 The following proprietary TCP/IP AT commands are used in this sample:
 
-* AT#XSOCKET=<op>,<type>
+* AT#XSOCKET=<op>[,<type>]
 * AT#XSOCKET?
-* AT#XBIND=<local_ip>,<local_port>
+* AT#XBIND=<port>
 * AT#XTCPCONN=<url>,<port>
 * AT#XTCPCONN?
 * AT#XTCPSEND=<data>
-* AT#XTCPRECV=<length>,<time>
+* AT#XTCPRECV=<length>,<timeout>
+
+UDP AT commands
+***************
+
+The following proprietary UDP AT commands are used in this sample:
+
+* AT#XSOCKET=<op>[,<type>]
+* AT#XSOCKET?
 * AT#XUDPSENDTO=<url>,<port>,<data>
-* AT#XUDPRECVFROM=<url>,<port>,<length>,<time>
+* AT#XUDPRECVFROM=<url>,<port>,<length>,<timeout>
 
 GPS AT Commands
 ***************
 
 The following proprietary GPS AT commands are used in this sample:
-
 
 * AT#XGPSRUN=<op>[,<mask>]
 * AT#XGPSRUN?
@@ -146,8 +165,7 @@ This application uses the following |NCS| libraries and drivers:
     * ``nrf/drivers/at_cmd``
     * ``nrf/lib/bsd_lib``
     * ``nrf/lib/at_cmd_parser``
-    * nRF BSD Socket
-    * Zephyr BSD socket
+    * ``nrf/lib/at_notif``
 
 In addition, it uses the Secure Partition Manager sample:
 

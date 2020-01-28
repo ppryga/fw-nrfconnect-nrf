@@ -22,6 +22,8 @@ The `AWS IoT Developer Guide`_ contains all required information about the Amazo
    A file server instance that hosts the new firmware image is required for this sample.
    You can set up and use your own AWS S3 server bucket to host the firmware described in the `Setting up an AWS S3 bucket`_ section.
 
+.. _creating_a_thing_in_AWS_IoT:
+
 Creating a thing in AWS IoT
 ===========================
 
@@ -104,7 +106,7 @@ Requirements
 
 * The following development board:
 
-  * nRF9160 DK board (PCA10090)
+  * |nRF9160DK|
 
 * An `AWS account`_ with access to Simple Storage Service (S3) and the IoT Core service
 

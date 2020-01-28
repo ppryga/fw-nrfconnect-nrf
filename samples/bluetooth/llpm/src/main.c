@@ -6,7 +6,7 @@
 
 #include <console.h>
 #include <string.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <zephyr/types.h>
 
 #include <bluetooth/bluetooth.h>
@@ -25,6 +25,7 @@
 #define INTERVAL_MIN    0x50     /* 80 units,  100 ms */
 #define INTERVAL_MAX    0x50     /* 80 units,  100 ms */
 #define INTERVAL_LLPM   0x0D01   /* Proprietary  1 ms */
+#define INTERVAL_LLPM_US 1000
 
 static volatile bool test_ready;
 static struct bt_conn *default_conn;
@@ -225,7 +226,7 @@ static int enable_llpm_mode(void)
 	cmd_enable = net_buf_add(buf, sizeof(*cmd_enable));
 	cmd_enable->enable = true;
 
-	err = bt_hci_cmd_send(HCI_VS_OPCODE_CMD_LLPM_MODE_SET, buf);
+	err = bt_hci_cmd_send_sync(HCI_VS_OPCODE_CMD_LLPM_MODE_SET, buf, NULL);
 	if (err) {
 		printk("Error enabling LLPM %d\n", err);
 		return err;
@@ -238,14 +239,32 @@ static int enable_llpm_mode(void)
 static int enable_llpm_short_connection_interval(void)
 {
 	int err;
-	struct bt_le_conn_param conn_param = {
-		.interval_min = INTERVAL_LLPM,
-		.interval_max = INTERVAL_LLPM,
-		.latency = 0,
-		.timeout = 300
-	};
+	struct net_buf *buf;
 
-	err = bt_conn_le_param_update(default_conn, &conn_param);
+	hci_vs_cmd_conn_update_t *cmd_conn_update;
+
+	buf = bt_hci_cmd_create(HCI_VS_OPCODE_CMD_CONN_UPDATE,
+				sizeof(*cmd_conn_update));
+	if (!buf) {
+		printk("Could not allocate command buffer\n");
+		return -ENOMEM;
+	}
+
+	u16_t conn_handle;
+
+	err = bt_hci_get_conn_handle(default_conn, &conn_handle);
+	if (err) {
+		printk("Failed obtaining conn_handle (err %d)\n", err);
+		return err;
+	}
+
+	cmd_conn_update = net_buf_add(buf, sizeof(*cmd_conn_update));
+	cmd_conn_update->connection_handle   = conn_handle;
+	cmd_conn_update->conn_interval_us    = INTERVAL_LLPM_US;
+	cmd_conn_update->conn_latency        = 0;
+	cmd_conn_update->supervision_timeout = 300;
+
+	err = bt_hci_cmd_send_sync(HCI_VS_OPCODE_CMD_CONN_UPDATE, buf, NULL);
 	if (err) {
 		printk("Update connection parameters failed (err %d)\n", err);
 		return err;
@@ -298,8 +317,8 @@ static int enable_qos_conn_evt_report(void)
 	cmd_enable = net_buf_add(buf, sizeof(*cmd_enable));
 	cmd_enable->enable = true;
 
-	err = bt_hci_cmd_send(HCI_VS_OPCODE_CMD_QOS_CONN_EVENT_REPORT_ENABLE,
-			      buf);
+	err = bt_hci_cmd_send_sync(
+		HCI_VS_OPCODE_CMD_QOS_CONN_EVENT_REPORT_ENABLE, buf, NULL);
 	if (err) {
 		printk("Could not send command buffer (err %d)\n", err);
 		return err;
@@ -326,37 +345,6 @@ static void latency_response_handler(const void *buf, u16_t len)
 static const struct bt_gatt_latency_c_cb latency_client_cb = {
 	.latency_response = latency_response_handler
 };
-
-static void bt_ready(int err)
-{
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-		return;
-	}
-
-	printk("Bluetooth initialized\n");
-
-	scan_init();
-
-	err = bt_gatt_latency_init(&gatt_latency, NULL);
-	if (err) {
-		printk("Latency service initialization failed (err %d)\n", err);
-		return;
-	}
-
-	err = bt_gatt_latency_c_init(&gatt_latency_client, &latency_client_cb);
-	if (err) {
-		printk("Latency client initialization failed (err %d)\n", err);
-		return;
-	}
-
-	if (enable_llpm_mode()) {
-		printk("Enable LLPM mode failed.\n");
-		return;
-	}
-
-	advertise_and_scan();
-}
 
 static void test_run(void)
 {
@@ -410,18 +398,41 @@ void main(void)
 
 	console_init();
 
-	err = bt_enable(bt_ready);
+	bt_conn_cb_register(&conn_callbacks);
+
+	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 		return;
 	}
 
+	printk("Bluetooth initialized\n");
+
+	scan_init();
+
+	err = bt_gatt_latency_init(&gatt_latency, NULL);
+	if (err) {
+		printk("Latency service initialization failed (err %d)\n", err);
+		return;
+	}
+
+	err = bt_gatt_latency_c_init(&gatt_latency_client, &latency_client_cb);
+	if (err) {
+		printk("Latency client initialization failed (err %d)\n", err);
+		return;
+	}
+
+	if (enable_llpm_mode()) {
+		printk("Enable LLPM mode failed.\n");
+		return;
+	}
+
+	advertise_and_scan();
+
 	if (enable_qos_conn_evt_report()) {
 		printk("Enable LLPM QoS failed.\n");
 		return;
 	}
-
-	bt_conn_cb_register(&conn_callbacks);
 
 	for (;;) {
 		if (test_ready) {

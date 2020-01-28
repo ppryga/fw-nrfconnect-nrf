@@ -67,7 +67,8 @@ extensions = [
     'zephyr.application',
     'zephyr.html_redirects',
     'only.eager_only',
-    'zephyr.link-roles'
+    'zephyr.link-roles',
+    'sphinx_tabs.tabs'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -108,7 +109,7 @@ try:
             extraversion = val
         if version_major and version_minor and patchlevel and extraversion:
             break
-except:
+except Exception:
     pass
 finally:
     if version_major and version_minor and patchlevel and extraversion is not None :
@@ -183,7 +184,7 @@ html_theme = "zephyr"
 html_theme_path = ['{}/doc/themes'.format(NRF_BASE)]
 html_favicon = '{}/doc/static/images/favicon.ico'.format(NRF_BASE)
 
-if tags.has('release'):
+if tags.has('release'):  # pylint: disable=undefined-variable
     is_release = True
     docs_title = 'Docs / %s' %(version)
 else:
@@ -320,6 +321,6 @@ linkcheck_workers = 10
 linkcheck_anchors = False
 
 def setup(app):
-   app.add_stylesheet("zephyr-custom.css")
-   app.add_stylesheet("css/zephyr.css")
-   app.add_stylesheet("css/common.css")
+    app.add_stylesheet("zephyr-custom.css")
+    app.add_stylesheet("css/zephyr.css")
+    app.add_stylesheet("css/common.css")

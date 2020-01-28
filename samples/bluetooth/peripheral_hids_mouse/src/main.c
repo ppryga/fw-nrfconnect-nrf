@@ -8,8 +8,8 @@
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <misc/printk.h>
-#include <misc/byteorder.h>
+#include <sys/printk.h>
+#include <sys/byteorder.h>
 #include <zephyr.h>
 #include <gpio.h>
 #include <soc.h>
@@ -553,30 +553,6 @@ static void mouse_handler(struct k_work *work)
 	}
 }
 
-
-static void bt_ready(int err)
-{
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-		return;
-	}
-
-	printk("Bluetooth initialized\n");
-
-	/* DIS initialized at system boot with SYS_INIT macro. */
-	hid_init();
-
-	k_delayed_work_init(&hids_work, mouse_handler);
-	k_work_init(&pairing_work, pairing_process);
-
-	if (IS_ENABLED(CONFIG_SETTINGS)) {
-		settings_load();
-	}
-
-	advertising_start();
-}
-
-
 #if defined(CONFIG_BT_GATT_HIDS_SECURITY_ENABLED)
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 {
@@ -791,11 +767,25 @@ void main(void)
 		bt_conn_auth_cb_register(&conn_auth_callbacks);
 	}
 
-	err = bt_enable(bt_ready);
+	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 		return;
 	}
+
+	printk("Bluetooth initialized\n");
+
+	/* DIS initialized at system boot with SYS_INIT macro. */
+	hid_init();
+
+	k_delayed_work_init(&hids_work, mouse_handler);
+	k_work_init(&pairing_work, pairing_process);
+
+	if (IS_ENABLED(CONFIG_SETTINGS)) {
+		settings_load();
+	}
+
+	advertising_start();
 
 	configure_buttons();
 
