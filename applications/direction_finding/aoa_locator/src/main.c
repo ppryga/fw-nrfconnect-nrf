@@ -17,32 +17,75 @@
 #include "ble.h"
 #include "protocol.h"
 #include "ll_sw/df_config.h"
+#include "ll_sw/df_data.h"
 #include "average_results.h"
 #include "float_ring_buffer.h"
 
-#define AOA_ANTENNAS_NUM	14	// number of antennas on board
-#define AOA_MATRIX_SIZE		4	// antennas are placed around center and create square - this is the size of the
-#define AOA_SNAPSHOT_LENGTH	1	// once cycle through antennas array (?)
-#define AOA_DISTANCE		0.4f	// distance between neighbor antennas
-#define AOA_REF_PERIOD		8	// number of "sampling time slots" in reference signal acquisition
-
+/*
+ * Antennas are placed around center and create square,
+ * this is number of antennas on single edge of matrix.
+ */
+#define AOA_MATRIX_SIZE		4
+#define ANTENA_DISTANCE 	(0.05f)
+#define BLE_WAVE_LEN		(0.125f)
+#define AOA_DISTANCE		(ANTENA_DISTANCE/BLE_WAVE_LEN)
 #define AOA_FREQUENCY		250000
 #define AOA_DEGTORAD		(PI/180)
 
-static const aoa_system_interface sys_iface =
+static const struct aoa_system_interface sys_iface =
 {
 	.uptime_get = k_uptime_get,
-	.get_sample_antenna_ids = df_get_sample_antenna_ids,
 };
 
 extern struct k_msgq df_packet_msgq;
 static void* handle;
-static aoa_results results = {0,0};
-static aoa_results avg_results;
+static struct aoa_results results = {0};
+static struct aoa_results avg_results;
+
+int df_map_iq_samples_to_antennas(struct df_packet *raw_data,
+				  struct df_packet_ex *mapped_data,
+				  struct df_sampling_config *sampling_conf,
+				  struct df_antenna_config *ant_config)
+{
+	assert(raw_data != NULL);
+	assert(mapped_data != NULL);
+
+	u16_t ref_samples_num = df_get_ref_samples_num(sampling_conf);
+	mapped_data->ref_data.antenna_id = ant_config->ref_ant_idx;
+
+	for(uint16_t idx = 0; idx < ref_samples_num; ++idx) {
+		mapped_data->ref_data.data[idx].i = raw_data->data[idx].iq.i;
+		mapped_data->ref_data.data[idx].q = raw_data->data[idx].iq.q;
+	}
+	mapped_data->ref_data.samples_num = ref_samples_num;
+
+	u16_t effective_ant_num = df_get_effective_ant_num(df_get_number_of_8us(),
+							   ant_config->switch_spacing,
+							   sampling_conf);
+
+	u8_t samples_num = df_get_sampling_slot_samples_num(ant_config, sampling_conf);
+	u8_t switch_period_sampl_num = df_get_switch_period_samples_num(ant_config, sampling_conf);
+
+	u8_t effective_sample_idx;
+
+	for(u16_t ant_idx = 0; ant_idx < effective_ant_num; ++ant_idx) {
+		mapped_data->sampl_data[ant_idx].antenna_id = ant_config->antennae_switch_idx[ant_idx % ant_config->antennae_switch_idx_len];
+		for(u8_t sample_idx = 0; sample_idx < samples_num; ++sample_idx) {
+			effective_sample_idx = ref_samples_num + (ant_idx * switch_period_sampl_num) + sample_idx;
+			mapped_data->sampl_data[ant_idx].data[sample_idx].i = raw_data->data[effective_sample_idx].iq.i;
+			mapped_data->sampl_data[ant_idx].data[sample_idx].q = raw_data->data[effective_sample_idx].iq.q;
+		}
+		mapped_data->sampl_data[ant_idx].samples_num = samples_num;
+	}
+
+	mapped_data->header.length = effective_ant_num;
+	mapped_data->header.frequency = raw_data->hdr.frequency;
+	return 0;
+}
 
 void main(void)
 {
-	if_data* iface = IF_Initialization();
+	struct if_data* iface = IF_Initialization();
 
 	if (iface == NULL) {
 		printk("Output interface initialization failed! Terminating!\r\n");
@@ -56,20 +99,21 @@ void main(void)
 
 	BLE_Initialization();
 
-	df_antenna_config* ant_config = df_get_antenna_config();
-	df_sampling_config *sampling_config = df_get_sampling_config();
+	struct df_antenna_config* ant_config = df_get_antenna_config();
+	struct df_sampling_config *sampling_config = df_get_sampling_config();
 
 	uint8_t antennas_num = df_get_effective_ant_num(df_get_number_of_8us(), ant_config->switch_spacing, sampling_config);
-
-	aoa_configuration aoa_config = {
+	uint16_t sample_spacing_ns = df_get_sample_spacing_ns(sampling_config->sample_spacing);
+	uint16_t slot_samples_num = df_get_switch_spacing_ns(ant_config->switch_spacing) / (sample_spacing_ns * 2);
+	struct aoa_configuration aoa_config = {
 			.matrix_size = AOA_MATRIX_SIZE,
 			//.antennas_num = ant_config->antennae_switch_idx_len,
 			.antennas_num = antennas_num,
-			.snapshot_len = AOA_SNAPSHOT_LENGTH,
 			.reference_period = sampling_config->ref_period_us,
 			.df_sw = df_get_switch_spacing_ns(ant_config->switch_spacing)/K_NSEC(1000),
 			.df_r = df_get_sample_spacing_ref_ns(sampling_config->sample_spacing_ref),
-			.df_s = df_get_sample_spacing_ns(sampling_config->sample_spacing),
+			.df_s = sample_spacing_ns,
+			.slot_samples_num = slot_samples_num,
 			.frequency = AOA_FREQUENCY,
 			.array_distance = AOA_DISTANCE,
 	};
@@ -82,12 +126,16 @@ void main(void)
 
 	while(1)
 	{
-		struct df_packet df_packet = {0};
-		memset(&df_packet, 0, sizeof(df_packet));
-		k_msgq_get(&df_packet_msgq, &df_packet, K_NO_WAIT);
-		if (df_packet.hdr.length != 0) {
+		struct df_packet df_data_packet = {0};
+		memset(&df_data_packet, 0, sizeof(struct df_packet));
+		k_msgq_get(&df_packet_msgq, &df_data_packet, K_NO_WAIT);
+		if (df_data_packet.hdr.length != 0) {
 			printk("data arrived\r\n");
-			int err = AOA_Handling(handle, &df_packet, &results);
+			struct df_packet_ex df_data_mapped = {0};
+			df_map_iq_samples_to_antennas(&df_data_packet, &df_data_mapped,
+						      df_get_sampling_config(),
+						      df_get_antenna_config());
+			int err = AOA_Handling(handle, &df_data_mapped, &results);
 			if (err) {
 				printk("AoA_Handling error: %d! Stopping the evaluation.\r\n", err);
 				break;
@@ -99,7 +147,7 @@ void main(void)
 			}
 			results.filtered_result.azimuth = avg_results.raw_result.azimuth;
 			results.filtered_result.elevation = avg_results.raw_result.elevation;
-			PROTOCOL_Handling(&aoa_config, &df_packet, &results);
+			PROTOCOL_Handling(&aoa_config, &df_data_packet, &results);
 		}
 		else
 		{
