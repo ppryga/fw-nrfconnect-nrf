@@ -7,11 +7,11 @@
 
 #include "if.h"
 
-static if_data g_if;
+static struct if_data g_if;
 static void if_uart_app_isr(struct device *dev);
 static void uart_send(uint8_t *buffer, uint16_t length);
 
-if_data *IF_Initialization(void)
+struct if_data *IF_Initialization(void)
 {
 
 	g_if.uart_app.send = uart_send;
@@ -31,7 +31,7 @@ if_data *IF_Initialization(void)
 
 static void if_uart_app_isr(struct device *dev)
 {
-	device_vector *uart = &g_if.uart_app;
+	struct device_vector *uart = &g_if.uart_app;
 	uint16_t i = 0;
 	uint16_t index = 0;
 	char buffer[255] = {0};
@@ -68,7 +68,7 @@ static void if_uart_app_isr(struct device *dev)
 
 static void uart_send(uint8_t *buffer, uint16_t length)
 {
-	device_vector *uart = &g_if.uart_app;
+	struct device_vector *uart = &g_if.uart_app;
 
 	size_t i = 0;
 

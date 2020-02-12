@@ -6,7 +6,7 @@
 
 struct device;
 
-typedef struct
+struct device_vector
 {
 	struct device *dev;
 	uint8_t rx_buffer[IF_BUFFER_SIZE];
@@ -15,14 +15,13 @@ typedef struct
 	uint16_t tx_index;
 
 	void (*send)(uint8_t *, uint16_t);
-} device_vector;
+};
 
-
-typedef struct if_data_t
+struct if_data
 {
-	device_vector uart_app;
-} if_data;
+	struct device_vector uart_app;
+};
 
-if_data* IF_Initialization(void);
+struct if_data* IF_Initialization(void);
 
 #endif

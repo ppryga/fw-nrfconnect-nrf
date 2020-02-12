@@ -14,14 +14,14 @@
 #include "common.h"
 #include "if.h"
 
-static protocol_data g_protocol_data;
+static struct protocol_data g_protocol_data;
 
-static uint16_t protocol_convert_to_string(const aoa_configuration *config,
+static uint16_t protocol_convert_to_string(const struct aoa_configuration *config,
 					   const struct df_packet *df_packet,
-					   const aoa_results *results, char *buffer,
+					   const struct aoa_results *results, char *buffer,
 					   uint16_t length);
 
-int PROTOCOL_Initialization(if_data* iface)
+int PROTOCOL_Initialization(struct if_data* iface)
 {
 	if (iface == NULL) {
 		return -EINVAL;
@@ -31,24 +31,26 @@ int PROTOCOL_Initialization(if_data* iface)
 	return 0;
 }
 
-int PROTOCOL_Handling(const aoa_configuration *config, const struct df_packet *df_packet,
-		       const aoa_results *results)
+int PROTOCOL_Handling(const struct aoa_configuration *config, const struct df_packet *df_data_packet,
+		      const struct aoa_results *results)
 {
-	if (config == NULL || df_packet == NULL || results == NULL) {
+	if (config == NULL || df_data_packet == NULL || results == NULL) {
 		return -EINVAL;
 	}
 
 	uint16_t length = 0;
 
-	length = protocol_convert_to_string(config, df_packet, results, g_protocol_data.string_packet, PROTOCOL_STRING_BUFFER_SIZE);
+	length = protocol_convert_to_string(config, df_data_packet, results, g_protocol_data.string_packet, PROTOCOL_STRING_BUFFER_SIZE);
 	//printk("PROTOCOL_Handling %s\r\n",protocol->string_packet);
 	g_protocol_data.uart->send(g_protocol_data.string_packet, length);
 
 	return 0;
 }
 
-static uint16_t protocol_convert_to_string(const aoa_configuration *config, const struct df_packet *df_packet,
-		const aoa_results *results, char *buffer, uint16_t length)
+static uint16_t protocol_convert_to_string(const struct aoa_configuration *config,
+					   const struct df_packet *df_data_packet,
+					   const struct aoa_results *results,
+					   char *buffer, uint16_t length)
 {
 	printk("DF_BEGIN\r\n");
 	uint16_t strlen = sprintf(buffer, "DF_BEGIN\r\n");
@@ -63,11 +65,11 @@ static uint16_t protocol_convert_to_string(const aoa_configuration *config, cons
 	strlen += sprintf(&buffer[strlen], "KE:%d\r\n", (int)results->filtered_result.elevation);
 	strlen += sprintf(&buffer[strlen], "KA:%d\r\n", (int)results->filtered_result.azimuth);
 
-	for(uint16_t i=0; i<results->iq_length; i++)
+	for(uint16_t i=0; i<df_data_packet->hdr.length; i++)
 	{
 		strlen += sprintf(&buffer[strlen], "IQ:%d,%d,%d,%d,%d\r\n", i,
 				 (int)sample_time[i], (int)sample_antenna_id[i],
-				 (int)df_packet->data[i].iq.q, (int)df_packet->data[i].iq.i);
+				 (int)df_data_packet->data[i].iq.q, (int)df_data_packet->data[i].iq.i);
 	}
 
 	strlen += sprintf(&buffer[strlen], "DF_END\r\n");

@@ -4,10 +4,10 @@
 #include "average_results.h"
 #include "float_ring_buffer.h"
 
-int Average_results(const aoa_results *results, aoa_results* average)
+int Average_results(const struct aoa_results *results, struct aoa_results* average)
 {
-	static float_ring_buffer azimuth_buffer;
-	static float_ring_buffer elevation_buffer;
+	static struct float_ring_buffer azimuth_buffer;
+	static struct float_ring_buffer elevation_buffer;
 
 	static float g_azimuth_sum;
 	static float g_elevation_sum;
@@ -52,7 +52,7 @@ int Average_results(const aoa_results *results, aoa_results* average)
 	return 0;
 }
 
-int LowPassFilter_IIR(const aoa_results *results, aoa_results* filtered, float alpha)
+int LowPassFilter_IIR(const struct aoa_results *results, struct aoa_results* filtered, float alpha)
 {
 	if (results == NULL || filtered == NULL) {
 		return -EINVAL;
@@ -75,14 +75,14 @@ int LowPassFilter_IIR(const aoa_results *results, aoa_results* filtered, float a
 	return 0;
 }
 
-int LowPassFilter_FIR(const aoa_results *results, aoa_results* filtered)
+int LowPassFilter_FIR(const struct aoa_results *results, struct aoa_results* filtered)
 {
 	if (results == NULL || filtered == NULL) {
 		return -EINVAL;
 	}
 
-	static float_ring_buffer azimuth_buffer;
-	static float_ring_buffer elevation_buffer;
+	static struct float_ring_buffer azimuth_buffer;
+	static struct float_ring_buffer elevation_buffer;
 
 	static bool init = false;
 	if (init == false) {
@@ -109,7 +109,7 @@ int LowPassFilter_FIR(const aoa_results *results, aoa_results* filtered)
 //	}
 	alpha = dt;
 
-	float_ring_buffer_iter iter;
+	struct float_ring_buffer_iter iter;
 
 	ring_buffer_get_iterator(&azimuth_buffer, &iter);
 
