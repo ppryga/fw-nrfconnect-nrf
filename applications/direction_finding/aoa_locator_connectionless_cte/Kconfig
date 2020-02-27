@@ -1,0 +1,34 @@
+#
+# Copyright (c) 2018 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
+
+menu "Aoa Locator Connection Less CTE"
+
+config AOA_LOCATOR_UART_PORT
+	string "Name of the UART port"
+	default "UART_0"
+
+config AOA_LOCATOR_REGULAR_CTE
+	bool "Enable regular sampling of CTE"
+	help
+	  Enables configuration that provides sampling settings
+	  that are allowed by BT specification. It is 1us sample
+	  spacing for reference period and 1us sample spacing for
+	  sampling period.
+
+config AOA_LOCATOR_OVERSAMPLING_CTE
+	bool "Enable Oversampling of CTE"
+	depends on !AOA_LOCATOR_REGULAR_CTE 
+	default n 
+	help
+	  Enables configuration that provides oversampling settings
+	  for CTE. The reference perios samples spacing is set to 
+	  250ns. Antenna switching period sample spacing is 250ns.
+
+endmenu
+
+menu "Zephyr Kernel"
+source "$ZEPHYR_BASE/Kconfig.zephyr"
+endmenu
