@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #include <assert.h>
 #include <string.h>
 
@@ -17,7 +23,7 @@ void main(void)
 {
 	printk("Starting AoA Locator CL!\r\n");
 	/* initialize UART interface to provide I/Q samples */
-	struct if_data* iface = IF_Initialization();
+	struct if_data* iface = if_initialization();
 
 	if (iface == NULL) {
 		printk("Locator stopped!\r\n");
@@ -26,7 +32,7 @@ void main(void)
 
 	int err;
 
-	err = PROTOCOL_Initialization(iface);
+	err = protocol_initialization(iface);
 	if (err) {
 		printk("Locator stopped!\r\n");
 		return;
@@ -39,7 +45,8 @@ void main(void)
 
 	sampl_conf = df_get_sampling_config();
 	ant_conf = df_get_antenna_config();
-	dfe_get_ant_gpios_config(&ant_gpio, &ant_gpio_len);
+	ant_gpio_len = dfe_get_ant_gpios_config_len();
+	dfe_get_ant_gpios_config(&ant_gpio);
 
 	assert(sampl_conf != NULL);
 	assert(ant_conf != NULL);
@@ -54,9 +61,8 @@ void main(void)
 	}
 
 	printk("Initialize Bluetooth\r\n");
-	BLE_Initialization();
+	ble_initialization();
 
-	k_sleep(K_MSEC(100));
 	while(1)
 	{
 		static bool no_data = false;
@@ -73,7 +79,7 @@ void main(void)
 			df_map_iq_samples_to_antennas(&df_data_mapped,
 						      &df_data_packet,
 						      sampl_conf, ant_conf);
-			err = PROTOCOL_Handling(sampl_conf, &df_data_mapped);
+			err = protocol_handling(sampl_conf, &df_data_mapped);
 			if (err) {
 				printk("Error in protocol handling!\r\n");
 				printk("Locator stopped!\r\n");

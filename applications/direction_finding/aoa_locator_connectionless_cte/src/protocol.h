@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #ifndef __PROTOCOL_H
 #define __PROTOCOL_H
 
@@ -16,7 +22,7 @@ struct protocol_data
 	char string_packet[PROTOCOL_STRING_BUFFER_SIZE];
 };
 
-int PROTOCOL_Initialization(struct if_data *iface);
-int PROTOCOL_Handling(const struct df_sampling_config *sampl_conf,
+int protocol_initialization(struct if_data *iface);
+int protocol_handling(const struct df_sampling_config *sampl_conf,
 		      const struct dfe_mapped_packet *mapped_data);
 #endif

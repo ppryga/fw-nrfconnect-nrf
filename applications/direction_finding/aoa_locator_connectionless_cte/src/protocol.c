@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2018 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +23,7 @@ static uint16_t protocol_convert_to_string(const struct df_sampling_config* samp
 					   const struct dfe_mapped_packet *mapped_data,
 					   char *buffer, uint16_t length);
 
-int PROTOCOL_Initialization(struct if_data* iface)
+int protocol_initialization(struct if_data* iface)
 {
 	if (iface == NULL) {
 		printk("[PROTOCOL] - iface is NULL, cannot initialize\r\n");
@@ -28,7 +34,7 @@ int PROTOCOL_Initialization(struct if_data* iface)
 	return 0;
 }
 
-int PROTOCOL_Handling(const struct df_sampling_config *sampl_conf,
+int protocol_handling(const struct df_sampling_config *sampl_conf,
 		      const struct dfe_mapped_packet *mapped_data)
 {
 	assert(sampl_conf != NULL);

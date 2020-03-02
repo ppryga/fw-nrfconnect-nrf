@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #include <errno.h>
 #include <device.h>
 #include <uart.h>
@@ -8,7 +14,7 @@ static struct if_data g_if;
 static void if_uart_app_isr(struct device *dev);
 static void uart_send(uint8_t *buffer, uint16_t length);
 
-struct if_data *IF_Initialization(void)
+struct if_data *if_initialization(void)
 {
 	g_if.uart_app.dev = device_get_binding(CONFIG_AOA_LOCATOR_UART_PORT);
 	if (!g_if.uart_app.dev) {
@@ -20,7 +26,6 @@ struct if_data *IF_Initialization(void)
 	uart_irq_tx_disable(g_if.uart_app.dev);
 	uart_irq_callback_set(g_if.uart_app.dev, if_uart_app_isr);
 	uart_irq_rx_enable(g_if.uart_app.dev);
-	k_sleep(K_MSEC(100));
 
 	g_if.uart_app.send = uart_send;
 

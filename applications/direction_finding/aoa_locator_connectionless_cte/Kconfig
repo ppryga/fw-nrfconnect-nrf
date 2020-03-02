@@ -10,6 +10,15 @@ config AOA_LOCATOR_UART_PORT
 	string "Name of the UART port"
 	default "UART_0"
 
+choice
+	prompt "CTE sampling configuration type"
+	default AOA_LOCATOR_REGULAR_CTE
+	help
+	  Select type of configuration used for CTE sampling:
+	  the one that comply with Bluetooth specification,
+	  or Nordics proprietary that uses Noridcs radio oversampling
+	  feature.
+
 config AOA_LOCATOR_REGULAR_CTE
 	bool "Enable regular sampling of CTE"
 	help
@@ -19,13 +28,12 @@ config AOA_LOCATOR_REGULAR_CTE
 	  sampling period.
 
 config AOA_LOCATOR_OVERSAMPLING_CTE
-	bool "Enable Oversampling of CTE"
-	depends on !AOA_LOCATOR_REGULAR_CTE 
-	default n 
+	bool "Enable Oversampling of CTE" 
 	help
 	  Enables configuration that provides oversampling settings
 	  for CTE. The reference perios samples spacing is set to 
 	  250ns. Antenna switching period sample spacing is 250ns.
+endchoice
 
 endmenu
 

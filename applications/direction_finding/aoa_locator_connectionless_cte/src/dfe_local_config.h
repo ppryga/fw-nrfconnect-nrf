@@ -1,9 +1,9 @@
 /*
- * dfe_config.h
+ * Copyright (c) 2020 Nordic Semiconductor ASA
  *
- *  Created on: Feb 20, 2020
- *      Author: ppryga
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
+
 
 #ifndef SRC_DFE_LOCAL_CONFIG_H_
 #define SRC_DFE_LOCAL_CONFIG_H_
@@ -67,7 +67,8 @@ struct df_sampling_config {
 
 const struct df_sampling_config *df_get_sampling_config();
 const struct df_antenna_config *df_get_antenna_config();
-void dfe_get_ant_gpios_config(const struct dfe_ant_gpio **ant_gpio, u8_t *len);
+void dfe_get_ant_gpios_config(const struct dfe_ant_gpio **ant_gpio);
+u8_t dfe_get_ant_gpios_config_len();
 
 int dfe_init(const struct df_sampling_config *sampl_conf,
 	     const struct df_antenna_config *ant_conf,

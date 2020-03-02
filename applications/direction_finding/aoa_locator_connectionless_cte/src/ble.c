@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #include <misc/printk.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
@@ -5,7 +11,7 @@
 #include "ble.h"
 
 
-int BLE_Initialization(void)
+int ble_initialization(void)
 {
 	struct bt_le_scan_param scan_param = {
 		.type       = BT_HCI_LE_SCAN_PASSIVE,

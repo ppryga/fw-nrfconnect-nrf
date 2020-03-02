@@ -1,9 +1,9 @@
 /*
- * dfe_config.h
+ * Copyright (c) 2020 Nordic Semiconductor ASA
  *
- *  Created on: Feb 20, 2020
- *      Author: ppryga
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
+
 #include <stddef.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -37,8 +37,8 @@ const static struct df_sampling_config g_sampl_config = {
 	.en_sampling_on_crc_error = false,
 	.dfe_trigger_task_only = true,
 	.sampling_type = RADIO_DFECTRL1_SAMPLETYPE_IQ,
-	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_1us,
-	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_1us,
+	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_250ns,
+	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_250ns,
 	.sample_offset = 1,
 	.switch_spacing = RADIO_DFECTRL1_TSWITCHSPACING_2us,
 	.switch_offset = 0,
@@ -84,13 +84,15 @@ const struct df_antenna_config* df_get_antenna_config()
 	return &g_ant_conf;
 }
 
-void dfe_get_ant_gpios_config(const struct dfe_ant_gpio** ant_gpio, u8_t* len)
+void dfe_get_ant_gpios_config(const struct dfe_ant_gpio** ant_gpio)
 {
 	assert(ant_gpio != NULL);
-	assert(len != NULL);
-
 	*ant_gpio = &g_gpio_conf[0];
-	*len = ARRAY_SIZE(g_gpio_conf);
+}
+
+u8_t dfe_get_ant_gpios_config_len()
+{
+	return ARRAY_SIZE(g_gpio_conf);
 }
 
 int dfe_init(const struct df_sampling_config *sampl_conf,
