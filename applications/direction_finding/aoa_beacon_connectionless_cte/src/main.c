@@ -123,5 +123,6 @@ void main(void)
 
 	while(1) {
 		printk("Running\r\n");
+		k_sleep(K_MSEC(1000));
 	}
 }
