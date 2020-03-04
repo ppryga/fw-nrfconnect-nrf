@@ -54,7 +54,6 @@ static int create_switching_pattern_array(u8_t *array, u8_t len,
 		const u8_t *gpio_patterns, u8_t gpio_patterns_len,
 		const u8_t *switch_array, u8_t switch_array_len);
 static u32_t get_switching_duration_ns(const struct df_sampling_config *sampling_conf);
-static u16_t get_switch_period_samples_num(const struct df_sampling_config *sampling_conf);
 static uint8_t get_effective_ant_num(const struct df_sampling_config *sampling_conf);
 static u16_t get_switch_spacing_ns(u8_t spacing);
 static u16_t get_ref_samples_num(const struct df_sampling_config* sampling_conf);
@@ -280,18 +279,6 @@ static u32_t get_switching_duration_ns(const struct df_sampling_config *sampling
 			(sampling_conf->guard_period_us + sampling_conf->ref_period_us));
 
 	return (swiching_duration_us * K_NSEC(1000));
-}
-
-static u16_t get_switch_period_samples_num(const struct df_sampling_config *sampling_conf)
-{
-	assert(sampling_conf != NULL);
-
-	u16_t sample_spacing_ns = df_get_sample_spacing_ns(sampling_conf->sample_spacing);
-	u16_t swich_spacing_ns = get_switch_spacing_ns(sampling_conf->switch_spacing);
-	/* Switch spacing time is a duration between antenna switch so it holds
-	 * swich slot and sample slot. Because of that
-	 */
-	return swich_spacing_ns / sample_spacing_ns;
 }
 
 static uint8_t get_effective_ant_num(const struct df_sampling_config *sampling_conf)
