@@ -13,7 +13,6 @@
 
 #include "dfe_local_config.h"
 
-#if defined(CONFIG_AOA_LOCATOR_REGULAR_CTE)
 const static struct df_sampling_config g_sampl_config = {
 	.dfe_mode = RADIO_DFEMODE_DFEOPMODE_AoA,
 	.start_of_sampl = RADIO_DFECTRL1_DFEINEXTENSION_CRC,
@@ -21,33 +20,21 @@ const static struct df_sampling_config g_sampl_config = {
 	.en_sampling_on_crc_error = false,
 	.dfe_trigger_task_only = true,
 	.sampling_type = RADIO_DFECTRL1_SAMPLETYPE_IQ,
+#if defined(CONFIG_AOA_LOCATOR_REGULAR_CTE)
 	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_1us,
 	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_1us,
-	.sample_offset = 1,
-	.switch_spacing = RADIO_DFECTRL1_TSWITCHSPACING_2us,
-	.switch_offset = 0,
-	.guard_period_us = 4,
-	.ref_period_us = 8,
-};
 #elif defined(CONFIG_AOA_LOCATOR_OVERSAMPLING_CTE)
-const static struct df_sampling_config g_sampl_config = {
-	.dfe_mode = RADIO_DFEMODE_DFEOPMODE_AoA,
-	.start_of_sampl = RADIO_DFECTRL1_DFEINEXTENSION_CRC,
-	.number_of_8us = 5,
-	.en_sampling_on_crc_error = false,
-	.dfe_trigger_task_only = true,
-	.sampling_type = RADIO_DFECTRL1_SAMPLETYPE_IQ,
 	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_250ns,
 	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_250ns,
-	.sample_offset = 1,
-	.switch_spacing = RADIO_DFECTRL1_TSWITCHSPACING_2us,
-	.switch_offset = 0,
-	.guard_period_us = 4,
-	.ref_period_us = 8,
-};
 #else
 #error "Missing configuration of CTE sampling."
 #endif
+	.sample_offset = 1,
+	.switch_spacing = RADIO_DFECTRL1_TSWITCHSPACING_2us,
+	.switch_offset = 0,
+	.guard_period_us = 4,
+	.ref_period_us = 8,
+};
 
 const static struct df_antenna_config g_ant_conf = {
 		.ref_ant_idx = 11,

@@ -17,6 +17,9 @@
 #include "dfe_local_config.h"
 #include "ble.h"
 
+/*number of loops to to avid when printing */
+#define MAIN_LOOP_NO_MSG_COUNT (1000)
+
 extern struct k_msgq df_packet_msgq;
 
 void main(void)
@@ -88,11 +91,17 @@ void main(void)
 		}
 		else
 		{
+			static u16_t counter = 0;
 			if(!no_data) {
-				printk("\r\nNo data received.");
 				no_data = true;
+				if (counter <= MAIN_LOOP_NO_MSG_COUNT) {
+					++counter;
+				} else {
+					printk("\r\nNo data received.");
+					counter = 0;
+				}
 			} else {
-				printk(".");
+				counter = 0;
 			}
 		}
 	 	k_sleep(K_MSEC(1));
