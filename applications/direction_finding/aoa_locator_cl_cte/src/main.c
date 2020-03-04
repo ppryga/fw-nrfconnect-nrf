@@ -68,7 +68,7 @@ void main(void)
 
 	while(1)
 	{
-		static bool no_data = false;
+		static u16_t no_msg_counter = 0;
 		static struct df_packet df_data_packet;
 		static struct dfe_mapped_packet df_data_mapped;
 
@@ -76,7 +76,6 @@ void main(void)
 		memset(&df_data_mapped, 0, sizeof(df_data_mapped));
 		k_msgq_get(&df_packet_msgq, &df_data_packet, K_NO_WAIT);
 		if (df_data_packet.hdr.length != 0) {
-			no_data = false;
 			printk("\r\nData arrived...\r\n");
 
 			df_map_iq_samples_to_antennas(&df_data_mapped,
@@ -88,20 +87,15 @@ void main(void)
 				printk("Locator stopped!\r\n");
 				return;
 			}
+			no_msg_counter = 0;
 		}
 		else
 		{
-			static u16_t counter = 0;
-			if(!no_data) {
-				no_data = true;
-				if (counter <= MAIN_LOOP_NO_MSG_COUNT) {
-					++counter;
-				} else {
-					printk("\r\nNo data received.");
-					counter = 0;
-				}
+			if (no_msg_counter > 0) {
+				--no_msg_counter;
 			} else {
-				counter = 0;
+				printk("\r\nNo data received.");
+				no_msg_counter = MAIN_LOOP_NO_MSG_COUNT;
 			}
 		}
 	 	k_sleep(K_MSEC(1));
