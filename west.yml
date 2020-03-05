@@ -38,7 +38,7 @@ manifest:
     - name: zephyr
       repo-path: df_zephyr
       west-commands: scripts/west-commands.yml
-      revision: 4670ae0e891985c9ff66b97b55e948b2868c18f7
+      revision: 1265d9bf41bb0f236dff714dcc4f0deb7c931f32
       remote: apps-fw
     - name: nffs
       revision: bc62a2fa9d98ddb5d633c932ea199bc68e10f194
