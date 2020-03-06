@@ -7,26 +7,36 @@
 #ifndef __IF_H
 #define __IF_H
 
+/** @brief Output buffer size
+ */
 #define IF_BUFFER_SIZE		2048
 
+/** @brief Zephyrs device structure forward declaration
+ */
 struct device;
 
-struct device_vector
-{
-	struct device *dev;
-	uint8_t rx_buffer[IF_BUFFER_SIZE];
-	uint8_t tx_buffer[IF_BUFFER_SIZE];
-	uint16_t rx_index;
-	uint16_t tx_index;
-
-	void (*send)(uint8_t *, uint16_t);
-};
-
+/* @brief Output interface data structure
+ */
 struct if_data
 {
-	struct device_vector uart_app;
+	/** @brief  pointer to device driver
+	 */
+	struct device *dev;
+	/** @brief output transfer buffer
+	 */
+	u8_t tx_buffer[IF_BUFFER_SIZE];
+	/** @brief Index of last stored byte in transfer buffer
+	 */
+	u16_t tx_index;
+
+	/* callback to send data */
+	void (*send)(u8_t *, u16_t);
 };
 
+/* @brief Initializes output interface
+ *
+ * @return pointer to output interface structure instance
+ */
 struct if_data* if_initialization(void);
 
 #endif

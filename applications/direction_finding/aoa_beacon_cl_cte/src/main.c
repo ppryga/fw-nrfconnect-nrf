@@ -17,39 +17,54 @@
 
 #define BT_DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define BT_DEVICE_NAME_LEN (sizeof(BT_DEVICE_NAME) - 1)
-/* Advertising interval provided in number of 0.625ms.
+/** @brief Advertising interval provided in number of 0.625ms.
  * In case of the example 160 * 0.625ms = 100ms.
  */
 #define BT_ADV_INTERVAL (160)
-/* duration of DFE in number of 8us (e.g. 10*8us = 80us).
+
+/** @brief Duration of DFE in number of 8us (e.g. 10*8us = 80us).
  * DFE is a Direction Finding Extension and may be used interchangeably
  * with CTE - Constant Tone Extension. The first one is used by Nordics radio
  * configuration registers, the second one is used by BT specification. */
 #define BT_DFE_DURATION (10)
 
-/* Set Scan Response data */
+/** @brief Set Scan Response data
+*/
 const static struct bt_data sd[] = {
 	BT_DATA(BT_DATA_NAME_COMPLETE, BT_DEVICE_NAME, BT_DEVICE_NAME_LEN),
 };
 
+/** @brief Bluetooth advertising configuration structure
+ */
 static bt_addr_le_t addr = {
 	.type = BT_ADDR_LE_RANDOM,
+	/* fixed MAC addres */
 	.a = {
 		.val = {0x01,0x02,0x03,0x04,0x05,0xc6},
 	},
 };
 
+/** @brief Beacon - CTE broadcaster - configuration data structure
+ */
 struct dfe_beacon_config {
 	u8_t dfe_duration;
 	u8_t dfe_mode;
 };
 
+/** @brief Beacon configuration instance
+ */
 const static struct dfe_beacon_config dfe_config = {
 	.dfe_duration = BT_DFE_DURATION,
 	.dfe_mode = RADIO_DFEMODE_DFEOPMODE_AoA,
 };
 
-static void bt_ready(int err)
+/** @brief Bluetooth ready callback function.
+ *
+ * The function starts advertising by the device when Bluetooth
+ * has successfully initialized.
+ *
+ */
+static void bt_ready_clb(int err)
 {
 	if (err) {
 		printk("[BT] - Callback initialization failed (err %d)\n", err);
@@ -69,6 +84,11 @@ static void bt_ready(int err)
 	printk("Beacon started\n");
 }
 
+/** @brief Initializes Bluetooth stack
+ *
+ * The function sets up a device MAC address and initializes the stack.
+ */
+
 static int bt_init()
 {
 	int err;
@@ -78,7 +98,7 @@ static int bt_init()
 		printk("[BT] - MAC setting error %d\n",err);
 		return err;
 	}
-	err = bt_enable(bt_ready);
+	err = bt_enable(bt_ready_clb);
 	if (err) {
 		printk("[BT] - Initialization failed (err %d)\n", err);
 		return err;
@@ -86,6 +106,8 @@ static int bt_init()
 	return 0;
 }
 
+/** @brief Initializes Direction Finding Extension
+ */
 static int dfe_init()
 {
 	int err;
@@ -103,6 +125,13 @@ static int dfe_init()
 	return 0;
 }
 
+/** @brief Main function of the example.
+ *
+ * The function starts Bluetooth and DFE and goes to
+ * in never ending loop.
+ * The loop is responsible for printing a message every second,
+ * to inform that the app is still running.
+ */
 void main(void)
 {
 	int err;
