@@ -1,6 +1,9 @@
-#include <stddef.h>
-#include <stdio.h>
-#include <string.h>
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #include <errno.h>
 #include <device.h>
 #include <uart.h>
@@ -11,23 +14,23 @@ static struct if_data g_if;
 static void if_uart_app_isr(struct device *dev);
 static void uart_send(uint8_t *buffer, uint16_t length);
 
-struct if_data *IF_Initialization(void)
+struct if_data *if_initialization(void)
 {
+	g_if.uart_app.dev = device_get_binding(CONFIG_AOA_LOCATOR_UART_PORT);
+	if (!g_if.uart_app.dev) {
+		printk("[UART] - Device not found or cannot be used\r\n");
+		return NULL;
+	}
+
+	uart_irq_rx_disable(g_if.uart_app.dev);
+	uart_irq_tx_disable(g_if.uart_app.dev);
+	uart_irq_callback_set(g_if.uart_app.dev, if_uart_app_isr);
+	uart_irq_rx_enable(g_if.uart_app.dev);
 
 	g_if.uart_app.send = uart_send;
-	g_if.uart_app.dev = device_get_binding("UART_0");
-	if (!g_if.uart_app.dev) {
-		printk("Can't get UART 0 device\r\n");
-		
-		uart_irq_rx_disable(g_if.uart_app.dev);
-		uart_irq_tx_disable(g_if.uart_app.dev);
-		uart_irq_callback_set(g_if.uart_app.dev, if_uart_app_isr);
-		uart_irq_rx_enable(g_if.uart_app.dev);
-		k_sleep(100);
-	}
+
 	return &g_if;
 }
-
 
 static void if_uart_app_isr(struct device *dev)
 {
@@ -42,11 +45,11 @@ static void if_uart_app_isr(struct device *dev)
 		{
 			if (uart_irq_tx_ready(dev))
 			{
-				printk("transmit ready");
+				printk("[UART] - transmit ready");
 			}
 			else
 			{
-				printk("spurious interrupt");
+				printk("[UART] - spurious interrupt");
 			}
 
 			break;
@@ -76,6 +79,4 @@ static void uart_send(uint8_t *buffer, uint16_t length)
 	{
 		uart_poll_out(uart->dev, buffer[i]);
 	}
-
 }
-

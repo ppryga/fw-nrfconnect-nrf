@@ -1,6 +1,11 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #ifndef __IF_H
 #define __IF_H
-
 
 #define IF_BUFFER_SIZE		2048
 
@@ -22,6 +27,6 @@ struct if_data
 	struct device_vector uart_app;
 };
 
-struct if_data* IF_Initialization(void);
+struct if_data* if_initialization(void);
 
 #endif

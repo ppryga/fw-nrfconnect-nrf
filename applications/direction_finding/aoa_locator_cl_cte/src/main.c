@@ -49,7 +49,7 @@ void main(void)
 	sampl_conf = df_get_sampling_config();
 	ant_conf = df_get_antenna_config();
 	ant_gpio_len = dfe_get_ant_gpios_config_len();
-	dfe_get_ant_gpios_config(&ant_gpio);
+	ant_gpio = dfe_get_ant_gpios_config();
 
 	assert(sampl_conf != NULL);
 	assert(ant_conf != NULL);
@@ -78,7 +78,7 @@ void main(void)
 		if (df_data_packet.hdr.length != 0) {
 			printk("\r\nData arrived...\r\n");
 
-			df_map_iq_samples_to_antennas(&df_data_mapped,
+			dfe_map_iq_samples_to_antennas(&df_data_mapped,
 						      &df_data_packet,
 						      sampl_conf, ant_conf);
 			err = protocol_handling(sampl_conf, &df_data_mapped);

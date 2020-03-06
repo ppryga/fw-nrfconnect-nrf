@@ -1,11 +1,12 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
 #ifndef __BLE_H
 #define __BLE_H
 
-
-#include "ble_struct.h"
-
-
-void BLE_Initialization(void);
-
+int ble_initialization();
 
 #endif

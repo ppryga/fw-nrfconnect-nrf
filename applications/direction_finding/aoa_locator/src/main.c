@@ -1,25 +1,32 @@
-#include <logging/log.h>
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
 
-#include <stddef.h>
-#include <stdio.h>
+#include <assert.h>
 #include <string.h>
-#include <errno.h>
+
+#include <kernel.h>
 #include <zephyr/types.h>
 #include <misc/printk.h>
-#include <misc/util.h>
-#include <device.h>
-#include <init.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
+#include <bluetooth/dfe_data.h>
+
+#include "if.h"
+#include "protocol.h"
+#include "dfe_local_config.h"
+#include "ble.h"
 
 #include "aoa.h"
 #include "if.h"
 #include "ble.h"
 #include "protocol.h"
-#include "ll_sw/df_config.h"
-#include "ll_sw/df_data.h"
+
 #include "average_results.h"
 #include "float_ring_buffer.h"
+
+/*number of loops to to avid when printing */
+#define MAIN_LOOP_NO_MSG_COUNT (1000)
 
 /*
  * Antennas are placed around center and create square,
@@ -42,117 +49,126 @@ static void* handle;
 static struct aoa_results results = {0};
 static struct aoa_results avg_results;
 
-int df_map_iq_samples_to_antennas(struct df_packet *raw_data,
-				  struct df_packet_ex *mapped_data,
-				  struct df_sampling_config *sampling_conf,
-				  struct df_antenna_config *ant_config)
-{
-	assert(raw_data != NULL);
-	assert(mapped_data != NULL);
-
-	u16_t ref_samples_num = df_get_ref_samples_num(sampling_conf);
-	mapped_data->ref_data.antenna_id = ant_config->ref_ant_idx;
-
-	for(uint16_t idx = 0; idx < ref_samples_num; ++idx) {
-		mapped_data->ref_data.data[idx].i = raw_data->data[idx].iq.i;
-		mapped_data->ref_data.data[idx].q = raw_data->data[idx].iq.q;
-	}
-	mapped_data->ref_data.samples_num = ref_samples_num;
-
-	u16_t effective_ant_num = df_get_effective_ant_num(df_get_number_of_8us(),
-							   ant_config->switch_spacing,
-							   sampling_conf);
-
-	u8_t samples_num = df_get_sampling_slot_samples_num(ant_config, sampling_conf);
-	u8_t switch_period_sampl_num = df_get_switch_period_samples_num(ant_config, sampling_conf);
-
-	u8_t effective_sample_idx;
-
-	for(u16_t ant_idx = 0; ant_idx < effective_ant_num; ++ant_idx) {
-		mapped_data->sampl_data[ant_idx].antenna_id = ant_config->antennae_switch_idx[ant_idx % ant_config->antennae_switch_idx_len];
-		for(u8_t sample_idx = 0; sample_idx < samples_num; ++sample_idx) {
-			effective_sample_idx = ref_samples_num + (ant_idx * switch_period_sampl_num) + sample_idx;
-			mapped_data->sampl_data[ant_idx].data[sample_idx].i = raw_data->data[effective_sample_idx].iq.i;
-			mapped_data->sampl_data[ant_idx].data[sample_idx].q = raw_data->data[effective_sample_idx].iq.q;
-		}
-		mapped_data->sampl_data[ant_idx].samples_num = samples_num;
-	}
-
-	mapped_data->header.length = effective_ant_num;
-	mapped_data->header.frequency = raw_data->hdr.frequency;
-	return 0;
-}
-
 void main(void)
 {
-	struct if_data* iface = IF_Initialization();
+	printk("Starting AoA Locator CL!\r\n");
+	/* initialize UART interface to provide I/Q samples */
+	struct if_data* iface = if_initialization();
 
 	if (iface == NULL) {
-		printk("Output interface initialization failed! Terminating!\r\n");
+		printk("Locator stopped!\r\n");
 		return;
 	}
 
-	if (PROTOCOL_Initialization(iface)) {
-		printk("Protocol intialization failed! Terminating!\r\n");
+	int err;
+
+	err = data_transfer_init(iface);
+	if (err) {
+		printk("Locator stopped!\r\n");
 		return;
 	}
 
-	BLE_Initialization();
+	const struct dfe_sampling_config* sampl_conf = NULL;
+	const struct dfe_antenna_config* ant_conf = NULL;
+	const struct dfe_ant_gpio* ant_gpio = NULL;
+	u8_t ant_gpio_len = 0;
 
-	struct df_antenna_config* ant_config = df_get_antenna_config();
-	struct df_sampling_config *sampling_config = df_get_sampling_config();
+	sampl_conf = dfe_get_sampling_config();
+	ant_conf = dfe_get_antenna_config();
+	ant_gpio_len = dfe_get_ant_gpios_config_len();
+	ant_gpio = dfe_get_ant_gpios_config();
 
-	uint8_t antennas_num = df_get_effective_ant_num(df_get_number_of_8us(), ant_config->switch_spacing, sampling_config);
-	uint16_t sample_spacing_ns = df_get_sample_spacing_ns(sampling_config->sample_spacing);
-	uint16_t slot_samples_num = df_get_switch_spacing_ns(ant_config->switch_spacing) / (sample_spacing_ns * 2);
+	assert(sampl_conf != NULL);
+	assert(ant_conf != NULL);
+	assert(ant_gpio != NULL);
+	assert(ant_gpio_len != 0);
+
+	printk("Initialize DFE\r\n");
+	err = dfe_init(sampl_conf, ant_conf, ant_gpio, ant_gpio_len);
+	if (err) {
+		printk("Locator stopped!\r\n");
+		return;
+	}
+
+	printk("Initialize Bluetooth\r\n");
+	ble_initialization();
+
 	struct aoa_configuration aoa_config = {
-			.matrix_size = AOA_MATRIX_SIZE,
-			//.antennas_num = ant_config->antennae_switch_idx_len,
-			.antennas_num = antennas_num,
-			.reference_period = sampling_config->ref_period_us,
-			.df_sw = df_get_switch_spacing_ns(ant_config->switch_spacing)/K_NSEC(1000),
-			.df_r = df_get_sample_spacing_ref_ns(sampling_config->sample_spacing_ref),
-			.df_s = sample_spacing_ns,
-			.slot_samples_num = slot_samples_num,
-			.frequency = AOA_FREQUENCY,
-			.array_distance = AOA_DISTANCE,
+		.matrix_size = AOA_MATRIX_SIZE,
+		//.antennas_num = ant_config->antennae_switch_idx_len,
+		.antennas_num = dfe_get_effective_ant_num(sampl_conf),
+		.reference_period = sampl_conf->ref_period_us,
+		.ant_switch_spacing = dfe_get_switch_spacing_ns(sampl_conf->switch_spacing) / K_NSEC(1000),
+		.sample_spacing_ref = dfe_get_sample_spacing_ref_ns(sampl_conf->sample_spacing_ref),
+		.sample_spacing = dfe_get_sample_spacing_ns(sampl_conf->sample_spacing),
+		.slot_samples_num = dfe_get_sampling_slot_samples_num(sampl_conf),
+		.frequency = AOA_FREQUENCY,
+		.array_distance = AOA_DISTANCE,
 	};
 
-	if (!AOA_Initialize(&sys_iface, &aoa_config, &handle)) {
+	if (!aoa_initialize(&sys_iface, &aoa_config, &handle)) {
 		printk("Aoa initialized\r\n");
 	}
 
-	k_sleep(K_MSEC(100));
-
 	while(1)
 	{
-		struct df_packet df_data_packet = {0};
-		memset(&df_data_packet, 0, sizeof(struct df_packet));
+		static u16_t no_msg_counter = 0;
+		static struct df_packet df_data_packet;
+		static struct dfe_mapped_packet df_data_mapped;
+		//static struct dfe_mapped_packet df_data_cleanet;
+
+		memset(&df_data_packet, 0, sizeof(df_data_packet));
+		memset(&df_data_mapped, 0, sizeof(df_data_mapped));
+		//memset(&df_data_cleanet, 0, sizeof(df_data_cleanet));
 		k_msgq_get(&df_packet_msgq, &df_data_packet, K_NO_WAIT);
 		if (df_data_packet.hdr.length != 0) {
-			printk("data arrived\r\n");
-			struct df_packet_ex df_data_mapped = {0};
-			df_map_iq_samples_to_antennas(&df_data_packet, &df_data_mapped,
-						      df_get_sampling_config(),
-						      df_get_antenna_config());
-			int err = AOA_Handling(handle, &df_data_mapped, &results);
+			printk("\r\nData arrived...\r\n");
+
+			dfe_map_iq_samples_to_antennas(&df_data_mapped,
+						      &df_data_packet,
+						      sampl_conf, ant_conf);
+
+			data_tranfer_prepare_header();
+			data_transfer_prepare_samples(sampl_conf,&df_data_mapped);
+
+			remove_samples_from_switch_slot(/*&df_data_cleanet,*/
+							&df_data_mapped,
+							sampl_conf);
+			int err = aoa_handling(handle, &df_data_mapped, &results);
 			if (err) {
 				printk("AoA_Handling error: %d! Stopping the evaluation.\r\n", err);
 				break;
 			}
-			err = LowPassFilter_FIR(&results, &avg_results);
+			err = low_pass_filter_FIR(&results, &avg_results);
 			if (err) {
 				printk("Averaging error: %d\r\n", err);
 				break;
 			}
 			results.filtered_result.azimuth = avg_results.raw_result.azimuth;
 			results.filtered_result.elevation = avg_results.raw_result.elevation;
-			PROTOCOL_Handling(&aoa_config, &df_data_packet, &results);
+
+//			err = protocol_handling(sampl_conf, &df_data_mapped, &results);
+//			if (err) {
+//				printk("Error in protocol handling!\r\n");
+//				printk("Locator stopped!\r\n");
+//				return;
+//			}
+
+			data_tranfer_prepare_results(sampl_conf, &results);
+			data_tranfer_prepare_footer();
+			data_tranfer_send();
+
+			no_msg_counter = 0;
 		}
 		else
 		{
-			printk("no data\r\n");
+			if (no_msg_counter > 0) {
+				--no_msg_counter;
+			} else {
+				printk("\r\nNo data received.");
+				no_msg_counter = MAIN_LOOP_NO_MSG_COUNT;
+			}
 		}
-	 	k_sleep(K_MSEC(1));
+		k_sleep(K_MSEC(1));
 	}
 }
