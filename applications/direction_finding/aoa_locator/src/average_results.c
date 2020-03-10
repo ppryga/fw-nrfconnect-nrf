@@ -4,7 +4,7 @@
 #include "average_results.h"
 #include "float_ring_buffer.h"
 
-int Average_results(const struct aoa_results *results, struct aoa_results* average)
+int average_results(const struct aoa_results *results, struct aoa_results* average)
 {
 	static struct float_ring_buffer azimuth_buffer;
 	static struct float_ring_buffer elevation_buffer;
@@ -52,7 +52,7 @@ int Average_results(const struct aoa_results *results, struct aoa_results* avera
 	return 0;
 }
 
-int LowPassFilter_IIR(const struct aoa_results *results, struct aoa_results* filtered, float alpha)
+int low_pass_filter_IIR(const struct aoa_results *results, struct aoa_results* filtered, float alpha)
 {
 	if (results == NULL || filtered == NULL) {
 		return -EINVAL;
@@ -75,7 +75,7 @@ int LowPassFilter_IIR(const struct aoa_results *results, struct aoa_results* fil
 	return 0;
 }
 
-int LowPassFilter_FIR(const struct aoa_results *results, struct aoa_results* filtered)
+int low_pass_filter_FIR(const struct aoa_results *results, struct aoa_results* filtered)
 {
 	if (results == NULL || filtered == NULL) {
 		return -EINVAL;

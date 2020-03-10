@@ -13,8 +13,9 @@
 #include "dfe_samples_data.h"
 
 #define K_NSEC(ns)	(ns)
+#define DFE_ANT_UNKNONW (255)
 
-struct df_antenna_config{
+struct dfe_antenna_config{
 	/* Index of antenna used for reference period */
 	u8_t ref_ant_idx;
 	/* Index of antenna used at start of CTE and after end of CTE
@@ -22,7 +23,7 @@ struct df_antenna_config{
 	u8_t idle_ant_idx;
 	/* The array stores values that should be set to GPIO to enable antenna
 	 * with given index. The index of the particular value is the antenna
-	 * number. Single bit of the value is set as a value for single GPIO pin. */
+	 * number. Single bit of the value is set as a value for signle GPIO pin. */
 	u8_t ant_gpio_pattern[16];
 	u8_t ant_gpio_pattern_len;
 	/* Array stores indices of antennas to be enabled in particular switch state.
@@ -34,7 +35,7 @@ struct df_antenna_config{
 };
 
 
-struct df_sampling_config {
+struct dfe_sampling_config {
 	/* Mode of DFE, currently we support on AoA */
 	u8_t dfe_mode;
 	/* Start point when CTE is added and start point when switching/sampling
@@ -65,20 +66,28 @@ struct df_sampling_config {
 	u8_t ref_period_us;
 };
 
-const struct df_sampling_config *df_get_sampling_config();
-const struct df_antenna_config *df_get_antenna_config();
+const struct dfe_sampling_config *dfe_get_sampling_config();
+const struct dfe_antenna_config *dfe_get_antenna_config();
 const struct dfe_ant_gpio* dfe_get_ant_gpios_config();
 u8_t dfe_get_ant_gpios_config_len();
 
-int dfe_init(const struct df_sampling_config *sampl_conf,
-	     const struct df_antenna_config *ant_conf,
+int dfe_init(const struct dfe_sampling_config *sampl_conf,
+	     const struct dfe_antenna_config *ant_conf,
 	     const struct dfe_ant_gpio *ant_gpio, u8_t ant_gpio_len);
 
 int dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
 				  const struct df_packet *raw_data,
-				  const struct df_sampling_config *sampling_conf,
-				  const struct df_antenna_config *ant_config);
-u16_t dfe_delay_before_first_sampl(const struct df_sampling_config* sampling_conf);
+				  const struct dfe_sampling_config *sampling_conf,
+				  const struct dfe_antenna_config *ant_config);
+int remove_samples_from_switch_slot(struct dfe_mapped_packet *data_out,
+				    /*const struct dfe_mapped_packet *in_data,*/
+				    const struct dfe_sampling_config *sampling_conf);
+
+u16_t dfe_delay_before_first_sampl(const struct dfe_sampling_config* sampling_conf);
 u16_t dfe_get_sample_spacing_ns(u8_t sampling);
 u16_t dfe_get_sample_spacing_ref_ns(u8_t sampling);
+u16_t dfe_get_switch_spacing_ns(u8_t spacing);
+u16_t dfe_get_sampling_slot_samples_num(const struct dfe_sampling_config *sampling_conf);
+uint8_t dfe_get_effective_ant_num(const struct dfe_sampling_config *sampling_conf);
+
 #endif /* SRC_DFE_LOCAL_CONFIG_H_ */

@@ -67,7 +67,7 @@ static u16_t protocol_convert_to_string(const struct df_sampling_config* sampl_c
 	strlen += sprintf(&buffer[strlen], "KE:%d\r\n", (int)0);
 	strlen += sprintf(&buffer[strlen], "KA:%d\r\n", (int)0);
 
-	u16_t time_u = df_get_sample_spacing_ref_ns(sampl_conf->sample_spacing_ref) / SAMPLING_TIME_UNIT;
+	u16_t time_u = dfe_get_sample_spacing_ref_ns(sampl_conf->sample_spacing_ref) / SAMPLING_TIME_UNIT;
 	u16_t ref_idx;
 
 	for(ref_idx = 0; ref_idx < mapped_data->ref_data.samples_num; ++ref_idx)
@@ -81,9 +81,9 @@ static u16_t protocol_convert_to_string(const struct df_sampling_config* sampl_c
 	/* copute delay  between last sample in reference period and first sample
 	 * in antenna switching period.
 	 */
-	u16_t delay =  df_delay_before_first_sampl(sampl_conf) / SAMPLING_TIME_UNIT;
+	u16_t delay =  dfe_delay_before_first_sampl(sampl_conf) / SAMPLING_TIME_UNIT;
 	delay += (time_u * (ref_idx-1));
-	time_u = df_get_sample_spacing_ns(sampl_conf->sample_spacing) / SAMPLING_TIME_UNIT;
+	time_u = dfe_get_sample_spacing_ns(sampl_conf->sample_spacing) / SAMPLING_TIME_UNIT;
 
 	for(u16_t idx=0; idx<mapped_data->header.length; ++idx)
 	{
