@@ -100,7 +100,7 @@ void data_tranfer_prepare_results(const struct dfe_sampling_config* sampl_conf,
 	strlen += sprintf(&buffer[strlen], "ME:%d\r\n", (int)result->raw_result.elevation);
 	strlen += sprintf(&buffer[strlen], "MA:%d\r\n", (int)result->raw_result.azimuth);
 	strlen += sprintf(&buffer[strlen], "KE:%d\r\n", (int)result->filtered_result.elevation);
-	strlen += sprintf(&buffer[strlen], "KA:%d\r\n", (int)result->filtered_result.elevation);
+	strlen += sprintf(&buffer[strlen], "KA:%d\r\n", (int)result->filtered_result.azimuth);
 
 	g_protocol_data.stored_data_len += strlen;
 }
