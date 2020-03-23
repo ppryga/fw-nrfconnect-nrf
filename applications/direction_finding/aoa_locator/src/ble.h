@@ -7,6 +7,8 @@
 #ifndef __BLE_H
 #define __BLE_H
 
+/** @brief Initialize Bluetooth stack and starts scanning
+ */
 int ble_initialization();
 
 #endif

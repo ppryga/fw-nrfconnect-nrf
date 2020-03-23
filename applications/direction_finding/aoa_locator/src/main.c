@@ -25,11 +25,11 @@
 #include "average_results.h"
 #include "float_ring_buffer.h"
 
-/*number of loops to to avid when printing */
+/** @brief Number of loops to to avid when printing
+ */
 #define MAIN_LOOP_NO_MSG_COUNT (1000)
 
-/*
- * Antennas are placed around center and create square,
+/** @brief Antennas are placed around center and create square,
  * this is number of antennas on single edge of matrix.
  */
 #define AOA_MATRIX_SIZE		4
@@ -39,16 +39,47 @@
 #define AOA_FREQUENCY		250000
 #define AOA_DEGTORAD		(PI/180)
 
+/** @brief Instance of a data structure to provide access to system calls
+ * from aoa_library.
+ */
 static const struct aoa_system_interface sys_iface =
 {
 	.uptime_get = k_uptime_get,
 };
 
+/** @brief Queue defined by BLE Controller to provide IQ samples data
+ */
 extern struct k_msgq df_packet_msgq;
+
+/** @brief Variable to store handle received from aoa_library initialization
+ */
 static void* handle;
+
+/** @brief Variable to store results of AoA evaluation
+ */
 static struct aoa_results results = {0};
+/** @brief Variable to store filtered results of AoA evaluation
+ */
 static struct aoa_results avg_results;
 
+/** @brief Main function of the example.
+ *
+ * The function is responsible for:
+ * - initialization of UART output
+ * - initialization of Direction Finding in Bluetooth stack
+ * - initialization of Bluetooth stack
+ * - initialization of angle of arrival library
+ * - receive DFE data from Bluetooth controller
+ * - mapping received data to antenna numbers
+ * - store raw IQ samples in a transfer buffer
+ * - remove IQ samples gathered during antenna switchign
+ * - evaluate angle of arrival
+ * - filter evaluated angles
+ * - store angles in transfer data
+ * - forwarding data by UART
+ *
+ * Steps between receive and forward data are processed in infinite loop.
+ */
 void main(void)
 {
 	printk("Starting AoA Locator CL!\r\n");
@@ -113,7 +144,7 @@ void main(void)
 	while(1)
 	{
 		static u16_t no_msg_counter = 0;
-		static struct df_packet df_data_packet;
+		static struct dfe_packet df_data_packet;
 		static struct dfe_mapped_packet df_data_mapped;
 		//static struct dfe_mapped_packet df_data_cleanet;
 
@@ -131,9 +162,7 @@ void main(void)
 			data_tranfer_prepare_header();
 			data_transfer_prepare_samples(sampl_conf,&df_data_mapped);
 
-			remove_samples_from_switch_slot(/*&df_data_cleanet,*/
-							&df_data_mapped,
-							sampl_conf);
+			remove_samples_from_switch_slot(&df_data_mapped, sampl_conf);
 			int err = aoa_handling(handle, &df_data_mapped, &results);
 			if (err) {
 				printk("AoA_Handling error: %d! Stopping the evaluation.\r\n", err);
@@ -146,13 +175,6 @@ void main(void)
 			}
 			results.filtered_result.azimuth = avg_results.raw_result.azimuth;
 			results.filtered_result.elevation = avg_results.raw_result.elevation;
-
-//			err = protocol_handling(sampl_conf, &df_data_mapped, &results);
-//			if (err) {
-//				printk("Error in protocol handling!\r\n");
-//				printk("Locator stopped!\r\n");
-//				return;
-//			}
 
 			data_tranfer_prepare_results(sampl_conf, &results);
 			data_tranfer_prepare_footer();

@@ -37,26 +37,67 @@ const static struct dfe_sampling_config g_sampl_config = {
 };
 
 const static struct dfe_antenna_config g_ant_conf = {
-		.ref_ant_idx = 11,
-		.idle_ant_idx = 11,
-		.ant_gpio_pattern = {0, 5, 6, 4, 9, 10, 8, 13, 14, 12, 1, 2, 0},
-		.ant_gpio_pattern_len = 13,
-		.antennae_switch_idx = {12,1,2,10,3,9,4,8,7,6,5},
-		.antennae_switch_idx_len = 11,
-		.gpio = {3,4,28,29},
-	};
+	.ref_ant_idx = 11,
+	.idle_ant_idx = 11,
+	.ant_gpio_pattern = {0, 5, 6, 4, 9, 10, 8, 13, 14, 12, 1, 2, 0},
+	.ant_gpio_pattern_len = 13,
+	.antennae_switch_idx = {12,1,2,10,3,9,4,8,7,6,5},
+	.antennae_switch_idx_len = 11
+};
 
 const static struct dfe_ant_gpio g_gpio_conf[4] = {
 		{0, 3}, {1,4}, {2, 28}, {3,29}
 };
 
+/** @brief Creates switching pattern array
+ *
+ * The function converts provided antenna indices into array of
+ * switch patterns that will be applied by radios DFE module to switch antennas.
+ *
+ * @param[out]	array				Pointer where to store patterns
+ * @param[in]	len					Length of @p array
+ * @param[in]	gpio_patterns		Array of GPIO patterns
+ * @param[in]	gpio_patterns_len	Length of @p gpio_patterns
+ * @param[in]	switch_array		Array with antenna indices
+ * @param[in]	switch_array_len	Length of @p switch_array
+ *
+ * @retval 0		switch pattern array created successfully
+ * @retval -EINVAL	one of pointers is NULL or one of lengths is zero
+ */
 static int create_switching_pattern_array(u8_t *array, u8_t len,
 		const u8_t *gpio_patterns, u8_t gpio_patterns_len,
 		const u8_t *switch_array, u8_t switch_array_len);
+
+/** @brief Evaluates duration of antenna switching period
+ *
+ * @param[in] sampling_conf	Sampling configuration
+ *
+ * @return Duration in [ns]
+ */
 static u32_t get_switching_duration_ns(const struct dfe_sampling_config *sampling_conf);
+
+
+/** @brief Evaluates number of samples collected in reference period
+ *
+ * @param[in] sampling_conf	Sampling configuration
+ *
+ * @return Number of samples
+ */
 static u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf);
 
+
+/** @brief Converts antenna switch spacing settings value to nanoseconds.
+ *
+ * Function verifies if oversampling is enabled. That means we would receive
+ * samples during antenna switching period.
+ *
+ * @param[in] sampling_conf	Sampling configuration
+ *
+ * @retval true		If oversampling is enables
+ * @retval false	If oversampling is disabled
+ */
 static inline bool is_oversampling_enabled(const struct dfe_sampling_config *sampling_conf);
+
 
 const struct dfe_sampling_config* dfe_get_sampling_config()
 {
@@ -177,8 +218,8 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 	return 0;
 }
 
-int dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
-				  const struct df_packet *raw_data,
+void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
+				  const struct dfe_packet *raw_data,
 				  const struct dfe_sampling_config *sampling_conf,
 				  const struct dfe_antenna_config *ant_config)
 {
@@ -239,7 +280,6 @@ int dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
 
 	mapped_data->header.length = effective_ant_num;
 	mapped_data->header.frequency = raw_data->hdr.frequency;
-	return 0;
 }
 
 int remove_samples_from_switch_slot(struct dfe_mapped_packet *data,
@@ -442,6 +482,13 @@ static inline bool is_oversampling_enabled(const struct dfe_sampling_config *sam
 {
 	assert(sampling_conf != NULL);
 
+	/* Please note that values used by radio to set switch spacing and
+	 * sample spacing are in reverse order. That means higher value, shorter
+	 * duration. E.g. :
+	 *  - RADIO_DFECTRL1_TSAMPLESPACING_4us (1UL) [4us]
+	    - RADIO_DFECTRL1_TSAMPLESPACING_2us (2UL) [2us]
+	 * Because of that logic here is opposite.
+	 */
 	if (sampling_conf->switch_spacing > sampling_conf->sample_spacing) {
 		return false;
 	} else {

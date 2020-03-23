@@ -15,11 +15,11 @@
 #include "protocol.h"
 #include "if.h"
 
-#define SAMPLING_TIME_UNIT (125) //smallest possible time between samples [ns]
+#define SAMPLING_TIME_UNIT (125) //!< smallest possible time between samples [ns]
 
 static struct protocol_data g_protocol_data;
 
-static uint16_t protocol_convert_to_string(const struct df_sampling_config* sampl_conf,
+static uint16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_conf,
 					   const struct dfe_mapped_packet *mapped_data,
 					   char *buffer, uint16_t length);
 
@@ -30,11 +30,11 @@ int protocol_initialization(struct if_data* iface)
 		return -EINVAL;
 	}
 
-	g_protocol_data.uart = &iface->uart_app;
+	g_protocol_data.uart = iface;
 	return 0;
 }
 
-int protocol_handling(const struct df_sampling_config *sampl_conf,
+int protocol_handling(const struct dfe_sampling_config *sampl_conf,
 		      const struct dfe_mapped_packet *mapped_data)
 {
 	assert(sampl_conf != NULL);
@@ -44,13 +44,29 @@ int protocol_handling(const struct df_sampling_config *sampl_conf,
 	length = protocol_convert_to_string(sampl_conf, mapped_data,
 					    g_protocol_data.string_packet,
 					    PROTOCOL_STRING_BUFFER_SIZE);
-	//printk("PROTOCOL_Handling %s\r\n",protocol->string_packet);
 	g_protocol_data.uart->send(g_protocol_data.string_packet, length);
 
 	return 0;
 }
 
-static u16_t protocol_convert_to_string(const struct df_sampling_config* sampl_conf,
+/** @brief Converts provided IQ samples into string
+ *
+ * The function stores provided IQ samples into a buffer.
+ * Format of a stored data is fixed:
+ * - header
+ * - sampling settings
+ * - not used fields for evaluated angles
+ * - IQ samples
+ * - footer
+ *
+ * @param[in]		sampl_config	Configuration of sampling
+ * @param[in]		mapped_data	IQ	samples mapped to antennas
+ * @param[in,out]	buffer			Memory to store string representation
+ * @param[in] 		len				length of memory provided by @p buffer
+ *
+ * @return Number of characters stored in transmission buffer.
+ */
+static u16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_conf,
 					   const struct dfe_mapped_packet *mapped_data,
 					   char *buffer, uint16_t length)
 {
@@ -78,7 +94,7 @@ static u16_t protocol_convert_to_string(const struct df_sampling_config* sampl_c
 				 (int)mapped_data->ref_data.data[ref_idx].q,
 				 (int)mapped_data->ref_data.data[ref_idx].i);
 	}
-	/* copute delay  between last sample in reference period and first sample
+	/* compute delay  between last sample in reference period and first sample
 	 * in antenna switching period.
 	 */
 	u16_t delay =  dfe_delay_before_first_sampl(sampl_conf) / SAMPLING_TIME_UNIT;

@@ -15,7 +15,7 @@
 #include "protocol.h"
 #include "if.h"
 
-#define SAMPLING_TIME_UNIT (125) //smallest possible time between samples [ns]
+#define SAMPLING_TIME_UNIT (125) //!< smallest possible time between samples [ns]
 
 static struct protocol_data g_protocol_data;
 
@@ -27,7 +27,7 @@ int data_transfer_init(struct if_data* iface)
 		return -EINVAL;
 	}
 
-	g_protocol_data.uart = &iface->uart_app;
+	g_protocol_data.uart = iface;
 	return 0;
 }
 
@@ -38,7 +38,7 @@ void data_tranfer_prepare_header()
 }
 
 void data_transfer_prepare_samples(const struct dfe_sampling_config* sampl_conf,
-				  const struct dfe_mapped_packet *mapped_data)
+										  const struct dfe_mapped_packet *mapped_data)
 {
 	assert(sampl_conf != NULL);
 	assert(mapped_data != NULL);
@@ -117,6 +117,4 @@ void data_tranfer_send()
 	g_protocol_data.uart->send(g_protocol_data.string_packet,
 				   g_protocol_data.stored_data_len);
 }
-
-
 

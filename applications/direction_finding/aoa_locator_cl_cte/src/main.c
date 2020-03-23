@@ -17,11 +17,27 @@
 #include "dfe_local_config.h"
 #include "ble.h"
 
-/*number of loops to to avid when printing */
+/** @brief number of loops to to avid when printing
+ */
 #define MAIN_LOOP_NO_MSG_COUNT (1000)
 
+/** @brief Queue defined by BLE Controller to provide IQ samples data
+ */
 extern struct k_msgq df_packet_msgq;
 
+/** @brief Main function of the example.
+ *
+ * The function is responsible for:
+ * - initialization of UART output
+ * - initialization of Direction Finding in Bluetooth stack
+ * - initialization of Bluetooth stack
+ * - receive DFE data from Bluetooth controller
+ * - mapping received data to antenna numbers
+ * - forwarding data by UART
+ *
+ * Following steps: data receive, mapping and their forwarding
+ * is done in never ending loop.
+ */
 void main(void)
 {
 	printk("Starting AoA Locator CL!\r\n");
@@ -41,13 +57,13 @@ void main(void)
 		return;
 	}
 
-	const struct df_sampling_config* sampl_conf = NULL;
-	const struct df_antenna_config* ant_conf = NULL;
+	const struct dfe_sampling_config* sampl_conf = NULL;
+	const struct dfe_antenna_config* ant_conf = NULL;
 	const struct dfe_ant_gpio* ant_gpio = NULL;
 	u8_t ant_gpio_len = 0;
 
-	sampl_conf = df_get_sampling_config();
-	ant_conf = df_get_antenna_config();
+	sampl_conf = dfe_get_sampling_config();
+	ant_conf = dfe_get_antenna_config();
 	ant_gpio_len = dfe_get_ant_gpios_config_len();
 	ant_gpio = dfe_get_ant_gpios_config();
 
@@ -69,7 +85,7 @@ void main(void)
 	while(1)
 	{
 		static u16_t no_msg_counter = 0;
-		static struct df_packet df_data_packet;
+		static struct dfe_packet df_data_packet;
 		static struct dfe_mapped_packet df_data_mapped;
 
 		memset(&df_data_packet, 0, sizeof(df_data_packet));
