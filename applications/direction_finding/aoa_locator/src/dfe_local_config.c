@@ -16,21 +16,14 @@
 const static struct dfe_sampling_config g_sampl_config = {
 	.dfe_mode = RADIO_DFEMODE_DFEOPMODE_AoA,
 	.start_of_sampl = RADIO_DFECTRL1_DFEINEXTENSION_CRC,
-	.number_of_8us = 5,
+	.number_of_8us = CONFIG_BT_CTLR_DFE_NUMBER_OF_8US,
 	.en_sampling_on_crc_error = false,
 	.dfe_trigger_task_only = true,
 	.sampling_type = RADIO_DFECTRL1_SAMPLETYPE_IQ,
-#if defined(CONFIG_AOA_LOCATOR_REGULAR_CTE)
-	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_1us,
-	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_1us,
-#elif defined(CONFIG_AOA_LOCATOR_OVERSAMPLING_CTE)
-	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_250ns,
-	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_250ns,
-#else
-#error "Missing configuration of CTE sampling."
-#endif
+	.sample_spacing_ref = CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_VAL,
+	.sample_spacing = CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_VAL,
 	.sample_offset = 1,
-	.switch_spacing = RADIO_DFECTRL1_TSWITCHSPACING_2us,
+	.switch_spacing = CONFIG_BT_CTLR_DFE_SWITCH_SPACING_VAL,
 	.switch_offset = 0,
 	.guard_period_us = 4,
 	.ref_period_us = 8,
@@ -219,9 +212,11 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 }
 
 void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
-				  const struct dfe_packet *raw_data,
-				  const struct dfe_sampling_config *sampling_conf,
-				  const struct dfe_antenna_config *ant_config)
+									struct dfe_iq_data_storage *iq_storage,
+									struct dfe_slot_samples_storage *slots_storage,
+									const struct dfe_packet *raw_data,
+									const struct dfe_sampling_config *sampling_conf,
+									const struct dfe_antenna_config *ant_config)
 {
 	assert(raw_data != NULL);
 	assert(mapped_data != NULL);
@@ -254,7 +249,7 @@ void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
 
 	for(u16_t ant_idx = 0; ant_idx < effective_ant_num; ++ant_idx) {
 		u8_t ant;
-		struct dfe_samples *sample = &mapped_data->sampl_data[ant_idx];
+		struct dfe_samples *sample = &slots_storage->data[ant_idx];
 
 		if (oversampl) {
 			if (ant_idx & 0x1) {
@@ -269,17 +264,20 @@ void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
 		}
 
 		sample->antenna_id = ant;
+		union dfe_iq_f *iq_data = iq_storage->data[ant_idx];
 
 		for(u8_t sample_idx = 0; sample_idx < samples_num; ++sample_idx) {
 			effective_sample_idx = ref_samples_num + (ant_idx * samples_num) + sample_idx;
-			sample->data[sample_idx].i = raw_data->data[effective_sample_idx].iq.i;
-			sample->data[sample_idx].q = raw_data->data[effective_sample_idx].iq.q;
+			iq_data[sample_idx].i = raw_data->data[effective_sample_idx].iq.i;
+			iq_data[sample_idx].q = raw_data->data[effective_sample_idx].iq.q;
 		}
 		sample->samples_num = samples_num;
+		sample->data = iq_data;
 	}
 
 	mapped_data->header.length = effective_ant_num;
 	mapped_data->header.frequency = raw_data->hdr.frequency;
+	mapped_data->sampl_data = slots_storage->data;
 }
 
 int remove_samples_from_switch_slot(struct dfe_mapped_packet *data,

@@ -16,21 +16,14 @@
 const static struct dfe_sampling_config g_sampl_config = {
 	.dfe_mode = RADIO_DFEMODE_DFEOPMODE_AoA,
 	.start_of_sampl = RADIO_DFECTRL1_DFEINEXTENSION_CRC,
-	.number_of_8us = 5,
+	.number_of_8us = CONFIG_BT_CTLR_DFE_NUMBER_OF_8US,
 	.en_sampling_on_crc_error = false,
 	.dfe_trigger_task_only = true,
 	.sampling_type = RADIO_DFECTRL1_SAMPLETYPE_IQ,
-#if defined(CONFIG_AOA_LOCATOR_REGULAR_CTE)
-	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_1us,
-	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_1us,
-#elif defined(CONFIG_AOA_LOCATOR_OVERSAMPLING_CTE)
-	.sample_spacing_ref = RADIO_DFECTRL1_TSAMPLESPACINGREF_250ns,
-	.sample_spacing = RADIO_DFECTRL1_TSAMPLESPACING_250ns,
-#else
-#error "Missing configuration of CTE sampling."
-#endif
+	.sample_spacing_ref = CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_VAL,
+	.sample_spacing = CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_VAL,
 	.sample_offset = 1,
-	.switch_spacing = RADIO_DFECTRL1_TSWITCHSPACING_2us,
+	.switch_spacing = CONFIG_BT_CTLR_DFE_SWITCH_SPACING_VAL,
 	.switch_offset = 0,
 	.guard_period_us = 4,
 	.ref_period_us = 8,

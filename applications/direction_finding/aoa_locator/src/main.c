@@ -62,6 +62,16 @@ static struct aoa_results results = {0};
  */
 static struct aoa_results avg_results;
 
+/** buffer for IQ samples */
+struct dfe_iq_data_storage iq_storage = {
+	.slots_num = DFE_TOTAL_SLOTS_NUM,
+	.samples_num = DFE_SAMPLES_PER_SLOT_NUM,
+};
+
+struct dfe_slot_samples_storage slots_storage = {
+		.slots_num = DFE_TOTAL_SLOTS_NUM,
+};
+
 /** @brief Main function of the example.
  *
  * The function is responsible for:
@@ -146,6 +156,7 @@ void main(void)
 		static u16_t no_msg_counter = 0;
 		static struct dfe_packet df_data_packet;
 		static struct dfe_mapped_packet df_data_mapped;
+
 		//static struct dfe_mapped_packet df_data_cleanet;
 
 		memset(&df_data_packet, 0, sizeof(df_data_packet));
@@ -156,8 +167,10 @@ void main(void)
 			printk("\r\nData arrived...\r\n");
 
 			dfe_map_iq_samples_to_antennas(&df_data_mapped,
-						      &df_data_packet,
-						      sampl_conf, ant_conf);
+										   &iq_storage,
+										   &slots_storage,
+										   &df_data_packet,
+										   sampl_conf, ant_conf);
 
 			data_tranfer_prepare_header();
 			data_transfer_prepare_samples(sampl_conf,&df_data_mapped);

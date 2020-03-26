@@ -8,6 +8,7 @@
 #define SRC_DFE_SAMPLES_DATA_H_
 
 #include <stdint.h>
+#include <bluetooth/dfe_data.h>
 
 /** @brief IQ samples package header structure
  */
@@ -39,15 +40,10 @@ union dfe_iq_f {
  *
  */
 struct dfe_samples {
-	union dfe_iq_f data[DF_SAMPLES_COUNT];
+	union dfe_iq_f data[DFE_SAMPLES_PER_SLOT_NUM];
 	uint8_t samples_num;
 	uint8_t antenna_id;
 } __attribute__((packed));
-
-/* This is a fixed value for reference period duration 8us and min sampling
- * spacing 125ns.
- */
-#define DF_REF_SAMPLES_COUNT (64)
 
 /** @brief IQ samples collected during reference period
  *
@@ -56,7 +52,7 @@ struct dfe_samples {
  * for single antenna in switching period.
  */
 struct dfe_ref_samples {
-	union dfe_iq_f data[DF_REF_SAMPLES_COUNT];
+	union dfe_iq_f data[DFE_REF_SAMPLES_NUM];
 	uint8_t samples_num;
 	uint8_t antenna_id;
 } __attribute__((packed));
@@ -76,7 +72,7 @@ struct dfe_ref_samples {
 struct dfe_mapped_packet {
 	struct dfe_header header;
 	struct dfe_ref_samples ref_data;
-	struct dfe_samples sampl_data[DF_MAX_EFFECTIVE_ANT_COUNT];
+	struct dfe_samples sampl_data[DFE_TOTAL_SLOTS_NUM];
 } __attribute__((packed));
 
 #endif /* SRC_DFE_SAMPLES_DATA_H_ */

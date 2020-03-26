@@ -13,7 +13,10 @@
 #include "dfe_samples_data.h"
 
 #define K_NSEC(ns)	(ns)
+
+/** Macro for unknown antenna index */
 #define DFE_ANT_UNKNONW (255)
+
 /** @brief DFE antennas switching configuration structure
  */
 struct dfe_antenna_config
@@ -74,6 +77,27 @@ struct dfe_sampling_config
 	u8_t ref_period_us;
 };
 
+/** @brief Storage for IQ samples collected during CTE sampling
+ *
+ * Size of a storage is based on settings provided by application configuration
+ * (@ref DFE_TOTAL_SLOTS_NUM, @ref DFE_SAMPLES_PER_SLOT_NUM).
+ */
+struct dfe_iq_data_storage {
+	uint8_t slots_num;					//!< number of slots
+	uint8_t samples_num;				//!< number of samples in a single slot
+	union dfe_iq_f data[DFE_TOTAL_SLOTS_NUM][DFE_SAMPLES_PER_SLOT_NUM];
+};
+
+/** @brief Storage for slots data holding IQ samples
+ *
+ *  * Size of a storage is based on settings provided by application configuration
+ * (@ref DFE_TOTAL_SLOTS_NUM).
+ */
+struct dfe_slot_samples_storage {
+	uint8_t slots_num;					//!< number of slots holding IQ samples
+	struct dfe_samples data[DFE_TOTAL_SLOTS_NUM];
+};
+
 /** @brief Returns instance of DFE sampling configuration data structure.
  *
  * @return instance of sampling configuration
@@ -120,15 +144,23 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
  * Radio provides raw IQ samples without information about time and antenna
  * used to collect them.
  *
- * @param[out] mapped_data	Storage for mapped IQ samples
+ * @note To decrease memory footprint the application is responsible to provide
+ * storage for IQ samples and collect them into sets for every sampling slot
+ * The library receives only pointers to data and mapping information.
+ *
+ * @param[out] mapped_data		Storage for mapped data for PDDA evaluation
+ * @param[out] iq_storage		Storage for IQ samples
+ * @param[out] slots_storage	Storage for sampling slots data
  * @param[in] raw_data		Raw IQ samples received from BLE controller
  * @param[in] sampl_conf	Sampling configuration
  * @param[in] ant_conf		Antenna switching configuration
  */
 void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
-				  const struct dfe_packet *raw_data,
-				  const struct dfe_sampling_config *sampling_conf,
-				  const struct dfe_antenna_config *ant_config);
+									struct dfe_iq_data_storage *iq_storage,
+									struct dfe_slot_samples_storage *slots_storage,
+									const struct dfe_packet *raw_data,
+									const struct dfe_sampling_config *sampling_conf,
+									const struct dfe_antenna_config *ant_config);
 
 /** @brief Removes samples collected in antenna switch slots
  *

@@ -37,8 +37,6 @@ KConfig
 The application provides the following custom configuration options:
 
 	* ``AOA_LOCATOR_UART_PORT`` defines the name of the UART port use to forward IQ samples.
-	* ``AOA_LOCATOR_REGULAR_CTE`` enables sampling configuration that complies with Bluetooth 5.1 specification.
-	* ``AOA_LOCATOR_OVERSAMPLING_CTE`` enables oversampling configuration that does not comply with Bluetooth 5.1 specification.
 
 Note that oversampling is a Nordic radio feature.
 Both configurations cannot work at once so make sure to disable one when enabling the other.
@@ -53,6 +51,9 @@ The application configuration file consists of the following parts:
    * UART configuration that enables driver and setup interrupts.
    * Direction finding configuration that enables: the direction finding subsystem, reception of CTE, regular sampling settings.
 
+To enable oversampling one may use following configuarion of sampling:
+CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_250NS=y
+CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_250NS=y
 
 Bluetooth initialization
 ========================
