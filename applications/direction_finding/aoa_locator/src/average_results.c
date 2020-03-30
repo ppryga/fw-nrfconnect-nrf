@@ -1,53 +1,109 @@
 #include <errno.h>
 #include <stdbool.h>
+#include <assert.h>
+#include <math.h>
 
 #include "average_results.h"
 #include "float_ring_buffer.h"
+
+#ifndef M_PI
+/** PI constant */
+#define M_PI		3.14159265358979323846
+#endif
+
+/** Convert angle in degrees to complex number
+ *
+ * Converted angle is a unit vector represented in form of
+ * real and imaginary part, because of that it is a complex
+ * representation of angle.
+ *
+ * @param[in] angle	Angle value in degrees
+ *
+ * @retrun Returns structure that represents complex number.
+ */
+static struct complex angle_to_complex(float angle);
+
+/** Convert angle in degrees to angle in radians
+ *
+ * @param[in] angle_deg	Angle value in degrees
+ *
+ * @retrun Returns angle value in radians
+ */
+static inline float deg_to_radian(float angle_deg)
+{
+	return (M_PI / 180.0) * angle_deg;
+}
+
+/** Convert angle in radians to angle in degrees
+ *
+ * @param[in] angle_rad	Angle value in radians
+ *
+ * @retrun Returns angle value in degrees
+ */
+static inline float radian_to_deg(float angle_rad)
+{
+	return (180.0 / M_PI) * angle_rad;
+}
 
 int average_results(const struct aoa_results *results, struct aoa_results* average)
 {
 	static struct float_ring_buffer azimuth_buffer;
 	static struct float_ring_buffer elevation_buffer;
 
-	static float g_azimuth_sum;
-	static float g_elevation_sum;
+	static struct complex g_azimuth_sum;
+	static struct complex g_elevation_sum;
 
 	if (results == NULL || average == NULL) {
 		return -EINVAL;
 	}
 
 	static bool init = false;
+
 	if (init == false) {
 		ring_buffer_init(&azimuth_buffer);
 		ring_buffer_init(&elevation_buffer);
 
-		g_azimuth_sum = 0.0;
-		g_elevation_sum = 0.0;
+		g_azimuth_sum.real = 0.0;
+		g_azimuth_sum.imag = 0.0;
+		g_elevation_sum.real = 0.0;
+		g_elevation_sum.imag = 0.0;
 
 		init = true;
 	}
 
-	float oldest_data = 0.0;
+	struct complex oldest_data = { 0.0, 0.0 };
+
 	if( ring_buffer_is_full(&azimuth_buffer)) {
 		ring_buffer_pop(&azimuth_buffer, &oldest_data);
 	}
 
-	g_azimuth_sum = g_azimuth_sum - oldest_data + results->raw_result.azimuth;
-	ring_buffer_push(&azimuth_buffer, results->raw_result.azimuth);
+	struct complex angle = angle_to_complex(results->raw_result.azimuth);
+
+	g_azimuth_sum.real = g_azimuth_sum.real - oldest_data.real + angle.real;
+	g_azimuth_sum.imag = g_azimuth_sum.imag - oldest_data.imag + angle.imag;
+	ring_buffer_push(&azimuth_buffer, &angle);
 	size_t len = ring_buffer_len(&azimuth_buffer);
 
-	average->raw_result.azimuth = g_azimuth_sum/len;
+	float angle_rad;
 
-	oldest_data = 0.0;
+	angle_rad = atan2f(g_azimuth_sum.imag, g_azimuth_sum.real);
+	average->raw_result.azimuth = radian_to_deg(angle_rad);
+
+	oldest_data.real = 0.0;
+	oldest_data.imag = 0.0;
 	if( ring_buffer_is_full(&elevation_buffer)) {
 		ring_buffer_pop(&elevation_buffer, &oldest_data);
 	}
 
-	g_elevation_sum = g_elevation_sum - oldest_data + results->raw_result.elevation;
-	ring_buffer_push(&elevation_buffer, results->raw_result.elevation);
+	angle = angle_to_complex(results->raw_result.elevation);
+
+	g_elevation_sum.real = g_elevation_sum.real - oldest_data.real + angle.real;
+	g_elevation_sum.imag = g_elevation_sum.imag - oldest_data.imag + angle.imag;
+	ring_buffer_push(&elevation_buffer, &angle);
 	len = ring_buffer_len(&elevation_buffer);
 
-	average->raw_result.elevation = g_elevation_sum/len;
+	angle_rad = atan2f(g_elevation_sum.imag, g_elevation_sum.real);
+	average->raw_result.elevation = radian_to_deg(angle_rad);
 
 	return 0;
 }
@@ -92,12 +148,15 @@ int low_pass_filter_FIR(const struct aoa_results *results, struct aoa_results* f
 		init = true;
 	}
 
-	ring_buffer_push(&azimuth_buffer, results->raw_result.azimuth);
-	ring_buffer_push(&elevation_buffer, results->raw_result.elevation);
+	struct complex angle;
 
-	float azimuth_filtered = 0.0;
-	float elevation_filtered = 0.0;
+	angle = angle_to_complex(results->raw_result.azimuth);
+	ring_buffer_push(&azimuth_buffer, &angle);
+	angle = angle_to_complex(results->raw_result.elevation);
+	ring_buffer_push(&elevation_buffer, &angle);
 
+	struct complex azimuth_filtered = { 0.0, 0.0 };
+	struct complex elevation_filtered = { 0.0, 0.0 };
 
 	size_t len = ring_buffer_len(&azimuth_buffer);
 	float alpha = (len == 1) ? 1.0: 2.0/(float)len;
@@ -113,11 +172,12 @@ int low_pass_filter_FIR(const struct aoa_results *results, struct aoa_results* f
 
 	ring_buffer_get_iterator(&azimuth_buffer, &iter);
 
-	float sample = 0.0;
+	struct complex sample = {0.0, 0.0};
 	while(ring_buffer_iter_is_end(&iter) == false){
 		ring_buffer_iter_read(&iter, &sample);
 
-		azimuth_filtered += (sample * alpha);
+		azimuth_filtered.real += (sample.real * alpha);
+		azimuth_filtered.imag += (sample.imag * alpha);
 		alpha += dt;
 
 		ring_buffer_iter_advance(&iter);
@@ -125,20 +185,38 @@ int low_pass_filter_FIR(const struct aoa_results *results, struct aoa_results* f
 
 	ring_buffer_get_iterator(&elevation_buffer, &iter);
 
-	float test = 0.0;
 	alpha = dt;
 
 	while(ring_buffer_iter_is_end(&iter) == false) {
 		ring_buffer_iter_read(&iter, &sample);
 
-		elevation_filtered += (sample * alpha);
+		elevation_filtered.real += (sample.real * alpha);
+		elevation_filtered.imag += (sample.imag * alpha);
 		alpha += dt;
 		ring_buffer_iter_advance(&iter);
 	}
 
-	filtered->raw_result.azimuth = azimuth_filtered;
-	filtered->raw_result.elevation = elevation_filtered;
-	filtered->filtered_result.azimuth = test;
+	float angle_rad;
+
+	angle_rad = atan2f(azimuth_filtered.imag, azimuth_filtered.real);
+	filtered->raw_result.azimuth = radian_to_deg(angle_rad);
+
+	angle_rad = atan2f(elevation_filtered.imag, elevation_filtered.real);
+	filtered->raw_result.elevation = radian_to_deg(angle_rad);
 
 	return 0;
+}
+
+static struct complex angle_to_complex(float angle)
+{
+	assert( angle >= 0 && angle < 360 );
+
+	float_t angle_rad = deg_to_radian(angle);
+
+	struct complex complex_angle;
+
+	complex_angle.real = cos(angle_rad);
+	complex_angle.imag = sin(angle_rad);
+
+	return complex_angle;
 }

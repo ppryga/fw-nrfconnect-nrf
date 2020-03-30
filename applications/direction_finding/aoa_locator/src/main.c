@@ -137,7 +137,7 @@ void main(void)
 	struct aoa_configuration aoa_config = {
 		.matrix_size = AOA_MATRIX_SIZE,
 		//.antennas_num = ant_config->antennae_switch_idx_len,
-		.antennas_num = dfe_get_effective_ant_num(sampl_conf),
+		.sampling_slots_num = dfe_get_effective_ant_num(sampl_conf),
 		.reference_period = sampl_conf->ref_period_us,
 		.ant_switch_spacing = dfe_get_switch_spacing_ns(sampl_conf->switch_spacing) / K_NSEC(1000),
 		.sample_spacing_ref = dfe_get_sample_spacing_ref_ns(sampl_conf->sample_spacing_ref),
@@ -181,6 +181,7 @@ void main(void)
 				printk("AoA_Handling error: %d! Stopping the evaluation.\r\n", err);
 				break;
 			}
+
 			err = low_pass_filter_FIR(&results, &avg_results);
 			if (err) {
 				printk("Averaging error: %d\r\n", err);

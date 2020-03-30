@@ -8,10 +8,17 @@
  */
 #define FR_INTERNAL_BUFFER_SIZE 20
 
+/** @brief Complex number data structure
+ */
+struct complex {
+	float real;
+	float imag;
+};
+
 /** @brief Ring buffer data structure
  */
 struct float_ring_buffer {
-	float buffer[FR_INTERNAL_BUFFER_SIZE];
+	struct complex buffer[FR_INTERNAL_BUFFER_SIZE];
 	size_t head;
 	size_t tail;
 	size_t max_len;
@@ -85,7 +92,7 @@ size_t ring_buffer_len(struct float_ring_buffer *buf);
  * @param buf	pointer to ring buffer instance
  * @param data	value to be stored in the instance of ring buffer
  */
-void ring_buffer_push(struct float_ring_buffer *buf, float data);
+void ring_buffer_push(struct float_ring_buffer *buf, struct complex *data);
 
 /** @brief Pops oldest available data
  *
@@ -100,7 +107,7 @@ void ring_buffer_push(struct float_ring_buffer *buf, float data);
  * @retval		-EINVAL if @p data or @p buf is a NULL pointer
  * @retval		-ENODATA if instance is empty
  */
-int ring_buffer_pop(struct float_ring_buffer *buf, float *data);
+int ring_buffer_pop(struct float_ring_buffer *buf, struct complex *data);
 
 /** @brief Provides ring buffer iterator
  *
@@ -166,7 +173,7 @@ bool ring_buffer_iter_is_end(struct float_ring_buffer_iter *iter);
  * @retval		zero if iterator get operation finished successfully
  * @retval		-EINVAL if @p iter or @p is a NULL pointer
  */
-int ring_buffer_iter_get(struct float_ring_buffer_iter *iter, float *data);
+int ring_buffer_iter_get(struct float_ring_buffer_iter *iter, struct complex *data);
 
 /** @brief Gets data pointed by iterator
  *
@@ -176,6 +183,6 @@ int ring_buffer_iter_get(struct float_ring_buffer_iter *iter, float *data);
  * @retval		zero if iterator get operation finished successfully
  * @retval		-EINVAL if @p iter or @p is a NULL pointer
  */
-int ring_buffer_iter_read(struct float_ring_buffer_iter *iter, float *data);
+int ring_buffer_iter_read(struct float_ring_buffer_iter *iter, struct complex *data);
 
 #endif /* AOA_LOCATOR_SRC_FLOAT_RING_BUFFER_H_ */

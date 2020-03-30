@@ -43,7 +43,7 @@ int low_pass_filter_IIR(const struct aoa_results *results, struct aoa_results* f
  * elevation angles. It uses current value and number of historical data
  * stored in internal ring buffer. Number of historical items stored
  * in the ring buffer is equivalent to max ring buffer capacity
- * (@see BUFFER_SIZE in float_ring_buffer.h file).
+ * @see FR_INTERNAL_BUFFER_SIZE.
  *
  * Current result is stored in the ring buffer to be used in a next call
  * as historical data.

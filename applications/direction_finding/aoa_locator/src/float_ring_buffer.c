@@ -56,10 +56,10 @@ size_t ring_buffer_len(struct float_ring_buffer *buf)
 	return len;
 }
 
-void ring_buffer_push(struct float_ring_buffer *buf, float data)
+void ring_buffer_push(struct float_ring_buffer *buf, struct complex *data)
 {
 	assert(buf != NULL);
-	buf->buffer[buf->head] = data;
+	buf->buffer[buf->head] = *data;
 
 	buf->head = advance_pointer(buf->head, buf->max_len);
 
@@ -68,7 +68,7 @@ void ring_buffer_push(struct float_ring_buffer *buf, float data)
 	}
 }
 
-int ring_buffer_pop(struct float_ring_buffer *buf, float *data)
+int ring_buffer_pop(struct float_ring_buffer *buf, struct complex *data)
 {
 	if (buf == NULL || data == NULL) {
 		return -EINVAL;
@@ -133,7 +133,7 @@ bool ring_buffer_iter_is_end(struct float_ring_buffer_iter *iter)
 	}
 }
 
-int ring_buffer_iter_get(struct float_ring_buffer_iter *iter, float *data)
+int ring_buffer_iter_get(struct float_ring_buffer_iter *iter, struct complex *data)
 {
 	if (iter == NULL || data == NULL) {
 		return -EINVAL;
@@ -147,7 +147,7 @@ int ring_buffer_iter_get(struct float_ring_buffer_iter *iter, float *data)
 	return err;
 }
 
-int ring_buffer_iter_read(struct float_ring_buffer_iter *iter, float *data)
+int ring_buffer_iter_read(struct float_ring_buffer_iter *iter, struct complex *data)
 {
 	if (iter == NULL || data == NULL) {
 		return -EINVAL;
