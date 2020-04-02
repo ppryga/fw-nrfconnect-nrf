@@ -23,6 +23,17 @@
  */
 static struct complex angle_to_complex(float angle);
 
+/** Convert complex number to angle in degrees
+ *
+ * Converts a unit vector represented in form of
+ * real and imaginary part to angle in degrees.
+ *
+ * @param[in] vector	Complex number that represent angle
+ *
+ * @retrun Returns angle value in degrees.
+ */
+float complex_to_angle(struct complex vector);
+
 /** Convert angle in degrees to angle in radians
  *
  * @param[in] angle_deg	Angle value in degrees
@@ -31,7 +42,7 @@ static struct complex angle_to_complex(float angle);
  */
 static inline float deg_to_radian(float angle_deg)
 {
-	return (M_PI / 180.0) * angle_deg;
+	return (M_PI / 180.0f) * angle_deg;
 }
 
 /** Convert angle in radians to angle in degrees
@@ -42,7 +53,7 @@ static inline float deg_to_radian(float angle_deg)
  */
 static inline float radian_to_deg(float angle_rad)
 {
-	return (180.0 / M_PI) * angle_rad;
+	return (180.0f / M_PI) * angle_rad;
 }
 
 int average_results(const struct aoa_results *results, struct aoa_results* average)
@@ -86,8 +97,7 @@ int average_results(const struct aoa_results *results, struct aoa_results* avera
 
 	float angle_rad;
 
-	angle_rad = atan2f(g_azimuth_sum.imag, g_azimuth_sum.real);
-	average->raw_result.azimuth = radian_to_deg(angle_rad);
+	average->raw_result.azimuth = complex_to_angle(g_azimuth_sum);
 
 	oldest_data.real = 0.0;
 	oldest_data.imag = 0.0;
@@ -102,8 +112,7 @@ int average_results(const struct aoa_results *results, struct aoa_results* avera
 	ring_buffer_push(&elevation_buffer, &angle);
 	len = ring_buffer_len(&elevation_buffer);
 
-	angle_rad = atan2f(g_elevation_sum.imag, g_elevation_sum.real);
-	average->raw_result.elevation = radian_to_deg(angle_rad);
+	average->raw_result.elevation = complex_to_angle(g_elevation_sum);
 
 	return 0;
 }
@@ -196,20 +205,15 @@ int low_pass_filter_FIR(const struct aoa_results *results, struct aoa_results* f
 		ring_buffer_iter_advance(&iter);
 	}
 
-	float angle_rad;
-
-	angle_rad = atan2f(azimuth_filtered.imag, azimuth_filtered.real);
-	filtered->raw_result.azimuth = radian_to_deg(angle_rad);
-
-	angle_rad = atan2f(elevation_filtered.imag, elevation_filtered.real);
-	filtered->raw_result.elevation = radian_to_deg(angle_rad);
+	filtered->raw_result.azimuth = complex_to_angle(azimuth_filtered);
+	filtered->raw_result.elevation = complex_to_angle(elevation_filtered);
 
 	return 0;
 }
 
 static struct complex angle_to_complex(float angle)
 {
-	assert( angle >= 0 && angle < 360 );
+	assert( angle >= 0.0f && angle < 360.0f );
 
 	float_t angle_rad = deg_to_radian(angle);
 
@@ -219,4 +223,15 @@ static struct complex angle_to_complex(float angle)
 	complex_angle.imag = sin(angle_rad);
 
 	return complex_angle;
+}
+
+float complex_to_angle(const struct complex vector)
+{
+	float angle_rad;
+
+	angle_rad = atan2f(vector.imag, vector.real);
+	float angle_deg = radian_to_deg(angle_rad);
+
+	angle_deg = (angle_deg >= 0.0f) ? angle_deg : (360.0f + angle_deg);
+	return angle_deg;
 }
