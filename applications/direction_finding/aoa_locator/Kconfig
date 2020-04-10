@@ -35,6 +35,15 @@ config AOA_LOCATOR_OVERSAMPLING_CTE
 	  250ns. Antenna switching period sample spacing is 250ns.
 endchoice
 
+config AOA_LOCATOR_DATA_SEND_WAIT_MS
+	int "Number of miliseconds to wait after data is sent over UART."
+	default 40
+	range 1 100
+	help
+		The time to wait after a data packet is send.
+		It is here because of the PC tool limitations,
+		to give it a time for data processing before sending next packet.
+
 endmenu
 
 menu "Zephyr Kernel"

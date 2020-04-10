@@ -25,9 +25,9 @@
 #include "average_results.h"
 #include "float_ring_buffer.h"
 
-/** @brief Number of loops to to avid when printing
+/** @brief Number of ms to wait for a data before printing no data note
  */
-#define MAIN_LOOP_NO_MSG_COUNT (1000)
+#define WAIT_FOR_DATA_BEFORE_PRINT (1000)
 
 /** @brief Antennas are placed around center and create square,
  * this is number of antennas on single edge of matrix.
@@ -153,7 +153,6 @@ void main(void)
 
 	while(1)
 	{
-		static u16_t no_msg_counter = 0;
 		static struct dfe_packet df_data_packet;
 		static struct dfe_mapped_packet df_data_mapped;
 
@@ -162,7 +161,7 @@ void main(void)
 		memset(&df_data_packet, 0, sizeof(df_data_packet));
 		memset(&df_data_mapped, 0, sizeof(df_data_mapped));
 		//memset(&df_data_cleanet, 0, sizeof(df_data_cleanet));
-		k_msgq_get(&df_packet_msgq, &df_data_packet, K_NO_WAIT);
+		k_msgq_get(&df_packet_msgq, &df_data_packet, K_MSEC(WAIT_FOR_DATA_BEFORE_PRINT));
 		if (df_data_packet.hdr.length != 0) {
 			printk("\r\nData arrived...\r\n");
 
@@ -193,18 +192,11 @@ void main(void)
 			data_tranfer_prepare_results(sampl_conf, &results);
 			data_tranfer_prepare_footer();
 			data_tranfer_send();
-
-			no_msg_counter = 0;
 		}
 		else
 		{
-			if (no_msg_counter > 0) {
-				--no_msg_counter;
-			} else {
-				printk("\r\nNo data received.");
-				no_msg_counter = MAIN_LOOP_NO_MSG_COUNT;
-			}
+			printk("\r\nNo data received.");
 		}
-		k_sleep(K_MSEC(1));
+		k_sleep(K_MSEC(CONFIG_AOA_LOCATOR_DATA_SEND_WAIT_MS));
 	}
 }
