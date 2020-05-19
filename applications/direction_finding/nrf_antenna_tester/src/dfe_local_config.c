@@ -13,6 +13,10 @@
 
 #include "dfe_local_config.h"
 
+#define MODULE df_config
+#include <logging/log.h>
+LOG_MODULE_REGISTER(MODULE, CONFIG_DF_APP_LOG_LEVEL);
+
 const static struct dfe_sampling_config g_sampl_config = {
 	.dfe_mode = RADIO_DFEMODE_DFEOPMODE_AoA,
 	.start_of_sampl = RADIO_DFECTRL1_DFEINEXTENSION_CRC,
@@ -148,19 +152,19 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 
 	err = dfe_set_mode(sampl_conf->dfe_mode);
 	if (err) {
-		printk("[DFE] - DFE mode is unknown\n");
+		LOG_ERR("DFE mode is unknown");
 		return -EINVAL;
 	}
 
 	err = dfe_set_duration(sampl_conf->number_of_8us);
 	if(err) {
-		printk("Error! Number of 8us periods is out of allowed range!\r\n");
+		LOG_ERR("Number of 8us periods is out of allowed range!");
 		return err;
 	}
 
 	err = dfe_set_start_point(sampl_conf->start_of_sampl);
 	if(err) {
-		printk("Error! DFE start point value is out of allowed range!\r\n");
+		LOG_ERR("DFE start point value is out of allowed range!");
 		return err;
 	}
 
@@ -170,44 +174,44 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 
 	err = dfe_set_sampling_spacing_ref(sampl_conf->sample_spacing_ref);
 	if(err) {
-		printk("Error! Reference sample spacing value is out of range!\r\n");
+		LOG_ERR("Reference sample spacing value is out of range!");
 		return err;
 	}
 	err = dfe_set_sampling_type(sampl_conf->sampling_type);
 	if(err) {
-		printk("Error! Sampling type value is out of range!\r\n");
+		LOG_ERR("Sampling type value is out of range!");
 		return err;
 	}
 	err = dfe_set_sample_spacing(sampl_conf->sample_spacing);
 	if(err) {
-		printk("Error! Sample spacing value is out of range!\r\n");
+		LOG_ERR("Sample spacing value is out of range!");
 		return err;
 	}
 	err = dfe_set_backoff_gain(0);
 	if(err) {
-		printk("Error! Gain backoff value is out of range!\r\n");
+		LOG_ERR("Gain backoff value is out of range!");
 		return err;
 	}
 	err = dfe_set_switch_offset(sampl_conf->switch_offset);
 	if(err) {
-		printk("Error! Switch offset value is out of range!\r\n");
+		LOG_ERR("Switch offset value is out of range!");
 		return err;
 	}
 	err = dfe_set_sample_offset(sampl_conf->sample_offset);
 	if(err) {
-		printk("Error! Sampling offset value is out of range!\r\n");
+		LOG_ERR("Sampling offset value is out of range!");
 		return err;
 	}
 
 	err = dfe_set_ant_switch_spacing(sampl_conf->switch_spacing);
 	if(err) {
-		printk("Error! Antenna switch spacing is out of range!\r\n");
+		LOG_ERR("Antenna switch spacing is out of range!");
 		return err;
 	}
 
 	err = dfe_set_ant_gpios(ant_gpio, ant_gpio_len);
 	if(err) {
-		printk("Error! Number of GPIO for antennas switching is to large!\r\n");
+		LOG_ERR("Number of GPIO for antennas switching is to large!");
 		return err;
 	}
 
@@ -219,7 +223,7 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 				       ant_conf->antennae_switch_idx,
 				       ant_conf->antennae_switch_idx_len);
 	if(err) {
-		printk("Error! Preparation of switch patterns array failed!\r\n");
+		LOG_ERR("Preparation of switch patterns array failed!");
 		return err;
 	}
 
@@ -228,7 +232,7 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 					pattern_array,
 					ant_conf->antennae_switch_idx_len);
 	if(err) {
-		printk("Error! Initialization of gpio patterns failed!\r\n");
+		LOG_ERR("Initialization of gpio patterns failed!");
 		return err;
 	}
 	return 0;

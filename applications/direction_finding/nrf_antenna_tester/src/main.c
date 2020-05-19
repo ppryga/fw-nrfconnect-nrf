@@ -9,13 +9,16 @@
 
 #include <kernel.h>
 #include <zephyr/types.h>
-#include <misc/printk.h>
 #include <bluetooth/dfe_data.h>
 
 #include "if.h"
 #include "protocol.h"
 #include "dfe_local_config.h"
 #include "ble.h"
+
+#define MODULE df_main
+#include <logging/log.h>
+LOG_MODULE_REGISTER(MODULE, CONFIG_DF_APP_LOG_LEVEL);
 
 /** @brief Number of ms to wait for a data before printing no data note
  */
@@ -40,12 +43,12 @@ extern struct k_msgq df_packet_msgq;
  */
 void main(void)
 {
-	printk("Starting AoA Locator CL!\r\n");
+	LOG_INF("Starting AoA Locator CL!");
 	/* initialize UART interface to provide I/Q samples */
 	struct if_data* iface = if_initialization();
 
 	if (iface == NULL) {
-		printk("nRF antenna tester stopped!\r\n");
+		LOG_ERR("Locator stopped!");
 		return;
 	}
 
@@ -53,7 +56,7 @@ void main(void)
 
 	err = protocol_initialization(iface);
 	if (err) {
-		printk("nRF antenna tester stopped!\r\n");
+		LOG_ERR("Locator stopped!");
 		return;
 	}
 
@@ -72,14 +75,14 @@ void main(void)
 	assert(ant_gpio != NULL);
 	assert(ant_gpio_len != 0);
 
-	printk("Initialize DFE\r\n");
+	LOG_INF("Initialize DFE");
 	err = dfe_init(sampl_conf, ant_conf, ant_gpio, ant_gpio_len);
 	if (err) {
-		printk("nRF antenna tester stopped!\r\n");
+		LOG_ERR("Locator stopped!");
 		return;
 	}
 
-	printk("Initialize Bluetooth\r\n");
+	LOG_INF("Initialize Bluetooth");
 	ble_initialization();
 
 	// while(1)
@@ -110,5 +113,5 @@ void main(void)
 	// 	k_sleep(K_MSEC(CONFIG_AOA_LOCATOR_DATA_SEND_WAIT_MS));
 	// }
 
-	printk("nRF antenna tester End\r\n");
+	LOG_INF("nRF antenna tester End");
 }

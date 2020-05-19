@@ -10,6 +10,9 @@
 
 #include "ble.h"
 
+#define MODULE df_ble
+#include <logging/log.h>
+LOG_MODULE_REGISTER(MODULE, CONFIG_DF_APP_LOG_LEVEL);
 
 int ble_initialization(void)
 {
@@ -21,20 +24,20 @@ int ble_initialization(void)
 	};
 	int err;
 
-	printk("[BT] Initialization started\r\n");
+	LOG_INF("Initialization started");
 
 	err = bt_enable(NULL);
 	if (err)
 	{
-		printk("[BT] Initialization failed (err %d)\r\n", err);
+		LOG_ERR("Initialization failed (err %d)", err);
 		return err;
 	}
 
-	printk("[BT] Starting scanning\r\n");
+	LOG_INF("Starting scanning");
 	err = bt_le_scan_start(&scan_param, NULL);
 	if (err)
 	{
-		printk("[BT] Start scanning failed (err %d)\n", err);
+		LOG_ERR("Start scanning failed (err %d)", err);
 		return err;
 	}
 	return 0;

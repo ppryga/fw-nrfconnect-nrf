@@ -10,10 +10,13 @@
 #include <errno.h>
 #include <assert.h>
 
-#include <misc/printk.h>
-
 #include "protocol.h"
 #include "if.h"
+
+#define MODULE df_protocol
+#include <logging/log.h>
+LOG_MODULE_REGISTER(MODULE, CONFIG_DF_APP_LOG_LEVEL);
+
 
 #define SAMPLING_TIME_UNIT (125) //!< smallest possible time between samples [ns]
 
@@ -26,7 +29,7 @@ static uint16_t protocol_convert_to_string(const struct dfe_sampling_config* sam
 int protocol_initialization(struct if_data* iface)
 {
 	if (iface == NULL) {
-		printk("[PROTOCOL] - iface is NULL, cannot initialize\r\n");
+		LOG_ERR("Parameter iface is NULL, cannot initialize");
 		return -EINVAL;
 	}
 
@@ -70,7 +73,6 @@ static u16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_
 					   const struct dfe_mapped_packet *mapped_data,
 					   char *buffer, uint16_t length)
 {
-	printk("DF_BEGIN\r\n");
 	u16_t strlen = sprintf(buffer, "DF_BEGIN\r\n");
 
 	strlen += sprintf(&buffer[strlen], "SW:%d\r\n", (int)sampl_conf->switch_spacing);
@@ -121,5 +123,4 @@ static u16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_
 
 	return strlen;
 }
-
 

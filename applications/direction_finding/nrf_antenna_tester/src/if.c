@@ -10,6 +10,10 @@
 
 #include "if.h"
 
+#define MODULE df_if
+#include <logging/log.h>
+LOG_MODULE_REGISTER(MODULE, CONFIG_DF_APP_LOG_LEVEL);
+
 /** @brief Storage for internals of output interface handling functionality */
 static struct if_data g_if;
 
@@ -33,7 +37,7 @@ struct if_data *if_initialization(void)
 {
 	g_if.dev = device_get_binding(CONFIG_AOA_LOCATOR_UART_PORT);
 	if (!g_if.dev) {
-		printk("[UART] - Device not found or cannot be used\r\n");
+		LOG_ERR("UART Device not found or cannot be used");
 		return NULL;
 	}
 
@@ -55,11 +59,11 @@ static void if_uart_app_isr(struct device *dev)
 		{
 			if (uart_irq_tx_ready(dev))
 			{
-				printk("[UART] - transmit ready");
+				LOG_DBG("ISR transmit ready");
 			}
 			else
 			{
-				printk("[UART] - spurious interrupt");
+				LOG_DBG("ISR spurious interrupt");
 			}
 
 			break;

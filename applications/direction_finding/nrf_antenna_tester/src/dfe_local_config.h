@@ -8,6 +8,7 @@
 #ifndef SRC_DFE_LOCAL_CONFIG_H_
 #define SRC_DFE_LOCAL_CONFIG_H_
 
+#include <stdbool.h>
 #include <bluetooth/dfe_config.h>
 #include <bluetooth/dfe_data.h>
 #include "dfe_samples_data.h"
