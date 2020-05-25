@@ -151,4 +151,15 @@ u16_t dfe_get_sample_spacing_ns(u8_t sampling);
  * @return Sample spacing in [ns]
  */
 u16_t dfe_get_sample_spacing_ref_ns(u8_t sampling);
+
+/** @brief Evaluates number of samples collected in reference period
+ *
+ * @param[in] sampling_conf	Sampling configuration
+ *
+ * @return Number of samples
+ */
+u16_t dfe_get_ref_samples_num(const struct dfe_sampling_config* sampling_conf);
+
+void dfe_set_single_antenna_for_whole_cte(u8_t antenna_num);
+
 #endif /* SRC_DFE_LOCAL_CONFIG_H_ */

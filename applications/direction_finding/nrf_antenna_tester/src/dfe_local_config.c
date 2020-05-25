@@ -33,7 +33,7 @@ const static struct dfe_sampling_config g_sampl_config = {
 	.ref_period_us = 8,
 };
 
-const static struct dfe_antenna_config g_ant_conf = {
+static struct dfe_antenna_config g_ant_conf = {
 		.ref_ant_idx = 11,
 		.idle_ant_idx = 11,
 		.ant_gpio_pattern = {0, 5, 6, 4, 9, 10, 8, 13, 14, 12, 1, 2, 0},
@@ -81,14 +81,6 @@ static u32_t get_switching_duration_ns(const struct dfe_sampling_config *samplin
  * @return Sample spacing in [ns]
  */
 static u16_t get_switch_spacing_ns(u8_t spacing);
-
-/** @brief Evaluates number of samples collected in reference period
- *
- * @param[in] sampling_conf	Sampling configuration
- *
- * @return Number of samples
- */
-static u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf);
 
 /** @brief Converts antenna switch spacing settings value to nanoseconds.
  *
@@ -246,7 +238,7 @@ void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
 	assert(raw_data != NULL);
 	assert(mapped_data != NULL);
 
-	u16_t ref_samples_num = get_ref_samples_num(sampling_conf);
+	u16_t ref_samples_num = dfe_get_ref_samples_num(sampling_conf);
 	mapped_data->ref_data.antenna_id = ant_config->ref_ant_idx;
 
 	for(uint16_t idx = 0; idx < ref_samples_num; ++idx) {
@@ -447,7 +439,7 @@ static u16_t get_sampling_slot_samples_num(const struct dfe_sampling_config *sam
 	}
 }
 
-static u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf)
+u16_t dfe_get_ref_samples_num(const struct dfe_sampling_config* sampling_conf)
 {
 	assert(sampling_conf != NULL);
 
@@ -475,4 +467,14 @@ u16_t dfe_delay_before_first_sampl(const struct dfe_sampling_config* sampling_co
 
 	assert(swich_spacing_ns != 0);
 	return (swich_spacing_ns >> 1) + ref_spacing_ns;
+}
+
+void dfe_set_single_antenna_for_whole_cte(u8_t antenna_num)
+{
+	assert(antenna_num < g_ant_conf.ant_gpio_pattern_len);
+
+	g_ant_conf.ref_ant_idx = antenna_num;
+	g_ant_conf.idle_ant_idx = antenna_num;
+	memset(g_ant_conf.antennae_switch_idx, antenna_num,
+		   g_ant_conf.antennae_switch_idx_len);
 }

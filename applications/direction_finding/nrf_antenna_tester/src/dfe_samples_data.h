@@ -8,6 +8,7 @@
 #define SRC_DFE_SAMPLES_DATA_H_
 
 #include <stdint.h>
+#include <zephyr/types.h>
 #include <bluetooth/dfe_data.h>
 
 /** @brief IQ samples package header structure

@@ -26,6 +26,8 @@ target_sources(app PRIVATE src/main.c
 	src/protocol.c
 	src/ble.c
 	src/dfe_local_config.c
+	src/antenna_test.c
+	src/iq_samples_statistics.c
 )
 
 target_include_directories(app PRIVATE $ENV{ZEPHYR_BASE}/samples/bluetooth)

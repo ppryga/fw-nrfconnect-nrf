@@ -1,10 +1,10 @@
 #
-# Copyright (c) 2018 Nordic Semiconductor ASA
+# Copyright (c) 2020 Nordic Semiconductor ASA
 #
 # SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
 #
 
-menu "Aoa Locator Connectionless CTE"
+menu "nRF Antenna Tester"
 
 config AOA_LOCATOR_UART_PORT
 	string "Name of the UART port"
@@ -19,6 +19,27 @@ config AOA_LOCATOR_DATA_SEND_WAIT_MS
 		It is here because of the PC tool limitations,
 		to give it a time for data processing before sending next packet.
 
+config ANT_TEST_WAIT_TIME_FOR_CTE_MS
+	int "Number of miliseconds to wait for CTE arrival."
+	default 1000
+	range 1 5000
+
+config ANT_TEST_NUMBER_OF_CTE_TO_COLLECT
+	int "Number of CTE packages to be collected for single antenna"
+	default 1
+	range 1 10
+	help
+	  Number of CTE packets to be collected for single patch antenna
+	  testing purposes.
+
+config ANT_TEST_PHASE_OFFSET_DEVIATION_RANGE_DEG
+	int "Maximum deviation of a phase offset between samples"
+	default 5
+	range 1 10
+	help
+	  Maximum deviation of a phase offset between consecutive
+	  samples. The unit is degree. 
+	
 module = DF_APP
 module-str = Direction Finding
 source "subsys/logging/Kconfig.template.log_config"

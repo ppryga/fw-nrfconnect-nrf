@@ -9,6 +9,7 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
+#include <stdarg.h>
 
 #include "protocol.h"
 #include "if.h"
@@ -63,15 +64,15 @@ int protocol_handling(const struct dfe_sampling_config *sampl_conf,
  * - footer
  *
  * @param[in]		sampl_config	Configuration of sampling
- * @param[in]		mapped_data	IQ	samples mapped to antennas
- * @param[in,out]	buffer			Memory to store string representation
- * @param[in] 		len				length of memory provided by @p buffer
+ * @param[in]		mapped_data	IQ samples mapped to antennas
+ * @param[in,out]	buffer		Memory to store string representation
+ * @param[in] 		len		Length of memory provided by @p buffer
  *
  * @return Number of characters stored in transmission buffer.
  */
 static u16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_conf,
-					   const struct dfe_mapped_packet *mapped_data,
-					   char *buffer, uint16_t length)
+					const struct dfe_mapped_packet *mapped_data,
+					char *buffer, uint16_t length)
 {
 	u16_t strlen = sprintf(buffer, "DF_BEGIN\r\n");
 
@@ -91,7 +92,7 @@ static u16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_
 	for(ref_idx = 0; ref_idx < mapped_data->ref_data.samples_num; ++ref_idx)
 	{
 		strlen += sprintf(&buffer[strlen], "IQ:%d,%d,%d,%d,%d\r\n", ref_idx,
-				time_u * ref_idx,
+				 time_u * ref_idx,
 				 (int)mapped_data->ref_data.antenna_id,
 				 (int)mapped_data->ref_data.data[ref_idx].q,
 				 (int)mapped_data->ref_data.data[ref_idx].i);
@@ -112,7 +113,7 @@ static u16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_
 			u16_t idx_offset = (sampl_data->samples_num * idx) + jdx;
 
 			strlen += sprintf(&buffer[strlen], "IQ:%d,%d,%d,%d,%d\r\n", ref_idx + idx_offset,
-					delay + (idx_offset) * time_u,
+					 delay + (idx_offset) * time_u,
 					 (int)sampl_data->antenna_id,
 					 (int)sampl_data->data[jdx].q,
 					 (int)sampl_data->data[jdx].i);
@@ -124,3 +125,22 @@ static u16_t protocol_convert_to_string(const struct dfe_sampling_config* sampl_
 	return strlen;
 }
 
+
+int protocol_send_msg(const char* message, ... )
+{
+	assert(message != NULL);
+
+	va_list argp;
+	va_start(argp, message);
+	int err = vsnprintf(g_protocol_data.string_packet, PROTOCOL_STRING_BUFFER_SIZE, message, argp);
+
+	if (err < 0) {
+		return err;
+	} else if (err >= PROTOCOL_STRING_BUFFER_SIZE) {
+		return err;
+	}
+	va_end(argp);
+
+	g_protocol_data.uart->send(g_protocol_data.string_packet, err);
+	return 0;
+}

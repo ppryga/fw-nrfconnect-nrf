@@ -12,4 +12,16 @@
  */
 int ble_initialization();
 
+/** @brief Starts Bluetooth scanning
+ *
+ * @return 0 if success, otherwise a (negative) error code.
+ */
+int bt_start_scanning();
+
+/** @brief Stops Bluetooth scanning
+ *
+ * @return 0 if success, otherwise a (negative) error code.
+ */
+int bt_stop_scanning();
+
 #endif

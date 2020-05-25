@@ -52,4 +52,17 @@ int protocol_initialization(struct if_data *iface);
  */
 int protocol_handling(const struct dfe_sampling_config *sampl_conf,
 					  const struct dfe_mapped_packet *mapped_data);
+
+/** @brief Send message through transfer buffer.
+ *
+ * The functions uses connected transport interface e.g. UART
+ * to send text message.
+ *
+ * @param[in] message	pointer to null terminated string
+ *
+ * @retval zero		success
+ * @retval -EINVAL	message is too long to be send
+ */
+int protocol_send_msg(const char* message, ... );
+
 #endif
