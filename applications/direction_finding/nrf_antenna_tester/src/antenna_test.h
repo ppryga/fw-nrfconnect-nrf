@@ -21,8 +21,8 @@ enum test_verbosity_level {
  *
  * @param[in] verbosity level of test log verbosity
  *
- * @return 0 if test successful, otherwise a (negative) error code.
+ * @return true if test successful, false otherwise.
  */
-int run_antenna_test_suite(enum test_verbosity_level verbosity);
+bool run_antenna_test_suite(enum test_verbosity_level verbosity);
 
 #endif /* DF_ANTENNA_TEST_H_ */

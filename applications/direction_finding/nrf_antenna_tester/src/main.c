@@ -57,13 +57,13 @@ static int start_test(const struct shell *shell, size_t argc, const char **argv)
 
 	shell_print(shell, "Antenna matrix test started");
 
-	int err = run_antenna_test_suite(verbosity);
+	bool result = run_antenna_test_suite(verbosity);
 
-	if(err) {
+	if(!result) {
 		shell_print(shell, "Antenna matrix test FAILED");
+	} else {
+		shell_print(shell, "Antenna matrix test SUCCESS");
 	}
-
-	shell_print(shell, "Antenna matrix test SUCCESS");
 
 	return 0;
 }

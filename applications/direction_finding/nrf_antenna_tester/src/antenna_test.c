@@ -75,9 +75,9 @@ static int collect_iq_samples(struct dfe_mapped_packet *mapped_data,
  * @param[in] mapped_data	Pointer to IQ samples mapped to antennas
  * @param[in] verbosity		Level of test log verbosity
  *
- * @return 0 if test finished successfully, not zero otherwise
+ * @return true if test finished successfully, false otherwise
  */
-static int test_are_iq_data_not_zeros(const struct dfe_mapped_packet *mapped_data,
+static bool test_are_iq_data_not_zeros(const struct dfe_mapped_packet *mapped_data,
 				      enum test_verbosity_level verbosity)
 {
 	LOG_DBG("Test IQ data are not zeros started");
@@ -131,7 +131,7 @@ static int test_are_iq_data_not_zeros(const struct dfe_mapped_packet *mapped_dat
 	}
 
 	LOG_DBG("Test IQ data are not zeros finished");
-	return zeros_count; //!< no zeros found mean success
+	return (zeros_count == 0); //!< no zeros found mean success
 }
 
 /** @brief Checks if any of IQ samples holds over saturation information.
@@ -209,7 +209,7 @@ static int test_are_iq_data_oversaturated(const struct dfe_mapped_packet *mapped
 	}
 
 	LOG_DBG("Test IQ data are not zeros finished");
-	return over_sat_count; //!< No over saturated samples found means success
+	return (over_sat_count == 0); //!< No over saturated samples found means success
 }
 
 
@@ -221,16 +221,16 @@ static int test_are_iq_data_oversaturated(const struct dfe_mapped_packet *mapped
  * provided range (-phase_range, phase_range).
  *
  * @param[in] mapped_data		Pointer to IQ samples mapped to antennas
- * @param[in] phase_range		Range to be checked if phase is in between
+ * @param[in] phase_range_deg	Range to be checked if phase is in between
  * @param[in] expected_phase_change	Value of expected phase change between
  * 					consecutive samples
  * @param[in] verbosity			Level of test log verbosity
  *
- * @return 0 is test is successful, negative value in case of error
+ * @return true if test finished successfully, false otherwise
  */
-static int test_if_phase_offset_in_error_range(const struct dfe_mapped_packet *mapped_data,
+static bool test_if_phase_offset_in_error_range(const struct dfe_mapped_packet *mapped_data,
 					       const struct dfe_sampling_config* sampl_conf,
-					       float phase_range,
+					       float phase_range_deg,
 					       float expected_phase_change,
 					       enum test_verbosity_level verbosity)
 {
@@ -274,16 +274,17 @@ static int test_if_phase_offset_in_error_range(const struct dfe_mapped_packet *m
 			phase_diff = wrapp_phase_around_pi(phase_diff);
 			diff_from_expected = fabs(phase_diff - expected_phase_change);
 
-			if( diff_from_expected > phase_diff) {
+			phase_diff = rad_to_deg(phase_diff);
+			diff_from_expected = rad_to_deg(diff_from_expected);
+
+			if( diff_from_expected > phase_range_deg) {
 				out_of_range = true;
 				samples_out_of_range++;
 			}
 
-			phase_diff = rad_to_deg(phase_diff);
-			diff_from_expected = rad_to_deg(diff_from_expected);
 			if(verbosity >= TEST_VERBOSITY_HIGH) {
-				protocol_send_msg("\tSample: %d phase1: %.3f, phase2: %.3f , abs. diff. %.3f, diff. from expected: %.3f. ",
-						  (index + iq_idx), rad_to_deg(phase1), rad_to_deg(phase2), phase_diff, diff_from_expected);
+				protocol_send_msg("\tSample: %d phase1: %.3f, phase2: %.3f , abs. diff. %.3f, diff. from expected: %.3f. allowed abs. diff.: %.3f ",
+						  (index + iq_idx), rad_to_deg(phase1), rad_to_deg(phase2), phase_diff, diff_from_expected, phase_range_deg);
 				if (out_of_range) {
 					protocol_send_msg("Sample FAILED. \r\n");
 				} else {
@@ -303,7 +304,7 @@ static int test_if_phase_offset_in_error_range(const struct dfe_mapped_packet *m
 		protocol_send_msg("\tTest SUCCESS\r\n");
 	}
 
-	return samples_out_of_range != 0;
+	return (samples_out_of_range == 0);
 }
 
 /** @brief Evaluates magnitude of IQ samples collected after
@@ -313,7 +314,7 @@ static int test_if_phase_offset_in_error_range(const struct dfe_mapped_packet *m
  * @param[in] verbosity		Level of test log verbosity
  *
  */
-static void test_is_magnitude_in_error_range(const struct dfe_mapped_packet *mapped_data,
+static void stat_evaluate_magnitude_of_samples(const struct dfe_mapped_packet *mapped_data,
 					     enum test_verbosity_level verbosity)
 {
 	LOG_DBG("Test if phase offset between samples is in range");
@@ -351,16 +352,16 @@ static void test_is_magnitude_in_error_range(const struct dfe_mapped_packet *map
  * @param[in] number_of_cte_to_analyze	Number of CTE to be collected and tested
  * @param[in] verbosity			Level of test log verbosity
  *
- * @return 0 is test is successful, negative value in case of error
+ * @return true if test finished successfully, false otherwise
  */
-static int test_antenna(u8_t antenna_num, u8_t number_of_cte_to_analyze,
+static bool test_antenna(u8_t antenna_num, u8_t number_of_cte_to_analyze,
 			enum test_verbosity_level verbosity)
 {
-	if (antenna_num == 0 || antenna_num > ANT_TEST_MAX_ANT_NUMBER) {
-		return -EINVAL;
-	}
+	assert(antenna_num != 0);
+	assert(antenna_num <= ANT_TEST_MAX_ANT_NUMBER);
 
 	int err;
+	bool test_result = true;
 	const struct dfe_sampling_config* sampl_conf = NULL;
 	const struct dfe_antenna_config* ant_conf = NULL;
 
@@ -371,11 +372,11 @@ static int test_antenna(u8_t antenna_num, u8_t number_of_cte_to_analyze,
 	err = initlialize_dfe(sampl_conf, ant_conf);
 	if (err) {
 		LOG_ERR("Error while DFE initialization: %d", err);
-		return err;
+		return false;
 	}
 	err = bt_start_scanning();
 	if (err) {
-		return err;
+		return false;
 	}
 
 	static struct dfe_mapped_packet df_mapped_data;
@@ -394,7 +395,7 @@ static int test_antenna(u8_t antenna_num, u8_t number_of_cte_to_analyze,
 		err = collect_iq_samples(&df_mapped_data, sampl_conf, ant_conf);
 		if (err) {
 			LOG_ERR("Error while collecting IQ data, CTE numb: %d", idx);
-			return err;
+			return false;
 		}
 
 		evaluate_stats_in_ref(&df_mapped_data.ref_data, sampl_conf,
@@ -407,60 +408,68 @@ static int test_antenna(u8_t antenna_num, u8_t number_of_cte_to_analyze,
 			protocol_send_msg("\tAvg. phase offset between periods [deg]: %.3f \r\n", avg_phase_off_periods);
 			protocol_send_msg("\tAvg. magnitude: %.3f \r\n", avg_magnitude);
 		}
-		test_are_iq_data_not_zeros(&df_mapped_data, verbosity);
-		test_are_iq_data_oversaturated(&df_mapped_data, verbosity);
-		test_if_phase_offset_in_error_range(&df_mapped_data, sampl_conf,
-						    (float)CONFIG_ANT_TEST_PHASE_OFFSET_DEVIATION_RANGE_DEG,
-						    expected_phase_diff, verbosity);
-		test_is_magnitude_in_error_range(&df_mapped_data, verbosity);
+		if (!test_are_iq_data_not_zeros(&df_mapped_data, verbosity)) {
+			test_result = false;
+		}
+		if (!test_are_iq_data_oversaturated(&df_mapped_data, verbosity)) {
+			test_result = false;
+		}
+		if (!test_if_phase_offset_in_error_range(&df_mapped_data, sampl_conf,
+						(float)CONFIG_ANT_TEST_PHASE_OFFSET_DEVIATION_RANGE_DEG,
+						    expected_phase_diff, verbosity)) {
+			test_result = false;
+		}
+		stat_evaluate_magnitude_of_samples(&df_mapped_data, verbosity);
 
 		if (verbosity >= TEST_VERBOSITY_HIGH) {
 			protocol_send_msg("[STAT] Raw data:\r\n");
 			err = send_iq_data(&df_mapped_data, sampl_conf);
 			if (err) {
 				LOG_ERR("Error while collecting IQ data, CTE numb: %d", idx);
-				return err;
+				return false;
 			}
 		}
 	}
 
 	err = bt_stop_scanning();
 	if (err) {
-		return err;
+		return false;
 	}
 
-	return 0;
+	return test_result;
 }
 
-int run_antenna_test_suite(enum test_verbosity_level verbosity)
+bool run_antenna_test_suite(enum test_verbosity_level verbosity)
 {
-	int err;
+	bool result;
+	bool global_result = true;
 	bool ant_test_results[ANT_TEST_MAX_ANT_NUMBER];
 
 	protocol_send_msg("[TEST] Start antennas matrix test\r\n");
 
 	for (int ant_idx = 1; ant_idx <= ANT_TEST_MAX_ANT_NUMBER; ++ant_idx) {
 		protocol_send_msg("[TEST] Antenna %d test START.\r\n", ant_idx);
-		err = test_antenna(ant_idx, CONFIG_ANT_TEST_NUMBER_OF_CTE_TO_COLLECT, verbosity);
-		if (err) {
-			protocol_send_msg("[TEST] Antenna %d test FILED. Error: %d\r\n", ant_idx, err);
+		result = test_antenna(ant_idx, CONFIG_ANT_TEST_NUMBER_OF_CTE_TO_COLLECT, verbosity);
+		if (!result) {
+			protocol_send_msg("[TEST] Antenna %d test FILED. Error: %d\r\n", ant_idx, result);
 		} else {
 			protocol_send_msg("[TEST] Antenna %d test SUCCSESS\r\n", ant_idx);
 		}
-		ant_test_results[ant_idx-1] = err;
+		ant_test_results[ant_idx-1] = result;
 	}
 
 	protocol_send_msg("[SUMMARY]\r\n");
 	for (int ant_idx = 0; ant_idx < ANT_TEST_MAX_ANT_NUMBER; ++ant_idx) {
-		if (ant_test_results[ant_idx]) {
+		if (!ant_test_results[ant_idx]) {
 			protocol_send_msg("[TEST] Antenna %d test FILED.\r\n", ant_idx+1);
+			global_result = false;
 		} else {
 			protocol_send_msg("[TEST] Antenna %d test SUCCSESS\r\n", ant_idx+1);
 		}
 	}
 	protocol_send_msg("[TEST] End antennas matrix test\r\n");
 
-	return 0;
+	return global_result;
 }
 
 /****************************************************************************

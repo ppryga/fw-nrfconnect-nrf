@@ -54,16 +54,14 @@ static inline float eval_sample_magnitude(union dfe_iq_f iq_sample)
 static inline float wrapp_phase_around_pi(float phase)
 {
 	if( phase > M_PI ) {
-		// do {
-		// 	phase -= 2.0f * M_PI;
-		// } while( phase > M_PI );
-		phase = fmod(phase, 2.0f * M_PI);
+		do {
+			phase -= 2.0f * M_PI;
+		} while( phase > M_PI );
 	}
 	if (phase < -M_PI ) {
-	// 	do {
-	// 		phase += 2.0f * M_PI;
-	// 	} while (phase < -M_PI );
-		phase = fmod(phase, -2.0f * M_PI);
+		do {
+			phase += 2.0f * M_PI;
+		} while (phase < -M_PI );
 	}
 
 	return phase;
@@ -78,10 +76,14 @@ static inline float wrapp_phase_around_pi(float phase)
 static inline float wrapp_phase_around_180(float phase)
 {
 	if( phase > 180.0 ) {
-		phase = fmod(phase, 360);
+		do {
+			phase -= 360;
+		} while( phase > 180.0 );
 	}
 	if (phase < -180 ) {
-		phase = fmod(phase, -360);
+		do {
+			phase += 360;
+		} while( phase < -180.0 );
 	}
 
 	return phase;
