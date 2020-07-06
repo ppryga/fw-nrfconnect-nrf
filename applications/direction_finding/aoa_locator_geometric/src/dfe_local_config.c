@@ -370,10 +370,10 @@ static u32_t get_switching_duration_ns(const struct dfe_sampling_config *samplin
 {
 	assert(sampling_conf != NULL);
 
-	u32_t swiching_duration_us = ((sampling_conf->number_of_8us * K_MSEC(8)) -
+	u32_t swiching_duration_us = ((sampling_conf->number_of_8us * DFE_US(8)) -
 			(sampling_conf->guard_period_us + sampling_conf->ref_period_us));
 
-	return (swiching_duration_us * K_NSEC(1000));
+	return (swiching_duration_us * DFE_NS(1000));
 }
 
 static uint8_t get_effective_ant_num(const struct dfe_sampling_config *sampling_conf)
@@ -391,16 +391,16 @@ static u16_t get_switch_spacing_ns(u8_t spacing) {
 	u16_t spacing_ns = 0;
 	switch(spacing) {
 		case 0:
-			spacing_ns = K_NSEC(8000);
+			spacing_ns = DFE_NS(8000);
 			break;
 		case RADIO_DFECTRL1_TSWITCHSPACING_4us:
-			spacing_ns = K_NSEC(4000);
+			spacing_ns = DFE_NS(4000);
 			break;
 		case RADIO_DFECTRL1_TSWITCHSPACING_2us:
-			spacing_ns = K_NSEC(2000);
+			spacing_ns = DFE_NS(2000);
 			break;
 		case RADIO_DFECTRL1_TSWITCHSPACING_1us:
-			spacing_ns = K_NSEC(1000);
+			spacing_ns = DFE_NS(1000);
 			break;
 		default:
 			return -1;
@@ -413,22 +413,22 @@ u16_t dfe_get_sample_spacing_ns(u8_t sampling)
 	u16_t sampling_ns = 0;
 	switch(sampling) {
 		case RADIO_DFECTRL1_TSAMPLESPACING_4us:
-			sampling_ns = K_NSEC(4000);
+			sampling_ns = DFE_NS(4000);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACING_2us:
-			sampling_ns = K_NSEC(2000);
+			sampling_ns = DFE_NS(2000);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACING_1us:
-			sampling_ns = K_NSEC(1000);
+			sampling_ns = DFE_NS(1000);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACING_500ns:
-			sampling_ns = K_NSEC(500);
+			sampling_ns = DFE_NS(500);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACING_250ns:
-			sampling_ns = K_NSEC(250);
+			sampling_ns = DFE_NS(250);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACING_125ns:
-			sampling_ns = K_NSEC(125);
+			sampling_ns = DFE_NS(125);
 			break;
 		default:
 			sampling_ns = -1;
@@ -441,22 +441,22 @@ u16_t dfe_get_sample_spacing_ref_ns(u8_t sampling) {
 	u16_t sampling_ns = 0;
 	switch(sampling) {
 		case RADIO_DFECTRL1_TSAMPLESPACINGREF_4us:
-			sampling_ns = K_NSEC(4000);
+			sampling_ns = DFE_NS(4000);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACINGREF_2us:
-			sampling_ns = K_NSEC(2000);
+			sampling_ns = DFE_NS(2000);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACINGREF_1us:
-			sampling_ns = K_NSEC(1000);
+			sampling_ns = DFE_NS(1000);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACINGREF_500ns:
-			sampling_ns = K_NSEC(500);
+			sampling_ns = DFE_NS(500);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACINGREF_250ns:
-			sampling_ns = K_NSEC(250);
+			sampling_ns = DFE_NS(250);
 			break;
 		case RADIO_DFECTRL1_TSAMPLESPACINGREF_125ns:
-			sampling_ns = K_NSEC(125);
+			sampling_ns = DFE_NS(125);
 			break;
 		default:
 			sampling_ns = -1;
@@ -490,7 +490,7 @@ static u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf
 	assert(sampling_conf != NULL);
 
 	u16_t sample_spacing_ns = dfe_get_sample_spacing_ref_ns(sampling_conf->sample_spacing_ref);
-	return sampling_conf->ref_period_us * K_NSEC(1000) / sample_spacing_ns;
+	return sampling_conf->ref_period_us * DFE_NS(1000) / sample_spacing_ns;
 }
 
 static inline bool is_oversampling_enabled(const struct dfe_sampling_config *sampling_conf)
@@ -530,16 +530,16 @@ u16_t dfe_get_switch_spacing_ns(u8_t spacing)
 	u16_t spacing_ns = 0;
 	switch(spacing) {
 		case 0:
-			spacing_ns = K_NSEC(8000);
+			spacing_ns = DFE_NS(8000);
 			break;
 		case RADIO_DFECTRL1_TSWITCHSPACING_4us:
-			spacing_ns = K_NSEC(4000);
+			spacing_ns = DFE_NS(4000);
 			break;
 		case RADIO_DFECTRL1_TSWITCHSPACING_2us:
-			spacing_ns = K_NSEC(2000);
+			spacing_ns = DFE_NS(2000);
 			break;
 		case RADIO_DFECTRL1_TSWITCHSPACING_1us:
-			spacing_ns = K_NSEC(1000);
+			spacing_ns = DFE_NS(1000);
 			break;
 		default:
 			return -1;

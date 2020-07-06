@@ -12,8 +12,8 @@
 #include <math.h>
 #include <complex.h>
 
-#include <misc/printk.h>
-#include <misc/util.h>
+#include <sys/printk.h>
+#include <sys/util.h>
 
 #include "protocol.h"
 #include "if.h"

@@ -12,7 +12,8 @@
 #include <bluetooth/dfe_data.h>
 #include "dfe_samples_data.h"
 
-#define K_NSEC(ns)	(ns)
+#define DFE_NS(ns)	(ns)
+#define DFE_US(us)	(us)
 
 /** Macro for unknown antenna index */
 #define DFE_ANT_UNKNONW (255)

@@ -13,7 +13,8 @@
 #include <bluetooth/dfe_data.h>
 #include "dfe_samples_data.h"
 
-#define K_NSEC(ns)	(ns)
+#define DFE_NS(ns)	(ns)
+#define DFE_US(us)	(us)
 
 /** @brief DFE antennas switching configuration structure
  */

@@ -6,7 +6,7 @@
 
 #include <errno.h>
 #include <device.h>
-#include <uart.h>
+#include <drivers/uart.h>
 
 #include "if.h"
 

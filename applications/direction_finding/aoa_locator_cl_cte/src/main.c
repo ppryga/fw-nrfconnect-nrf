@@ -9,7 +9,7 @@
 
 #include <kernel.h>
 #include <zephyr/types.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <bluetooth/dfe_data.h>
 
 #include "if.h"

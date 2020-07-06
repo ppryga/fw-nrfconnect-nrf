@@ -9,7 +9,7 @@
 
 #include <kernel.h>
 #include <zephyr/types.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <bluetooth/dfe_data.h>
 
 #include "if.h"
@@ -139,7 +139,7 @@ void main(void)
 		//.antennas_num = ant_config->antennae_switch_idx_len,
 		.sampling_slots_num = dfe_get_effective_ant_num(sampl_conf),
 		.reference_period = sampl_conf->ref_period_us,
-		.ant_switch_spacing = dfe_get_switch_spacing_ns(sampl_conf->switch_spacing) / K_NSEC(1000),
+		.ant_switch_spacing = dfe_get_switch_spacing_ns(sampl_conf->switch_spacing) / DFE_NS(1000),
 		.sample_spacing_ref = dfe_get_sample_spacing_ref_ns(sampl_conf->sample_spacing_ref),
 		.sample_spacing = dfe_get_sample_spacing_ns(sampl_conf->sample_spacing),
 		.slot_samples_num = dfe_get_sampling_slot_samples_num(sampl_conf),

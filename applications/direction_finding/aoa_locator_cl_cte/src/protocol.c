@@ -10,7 +10,7 @@
 #include <errno.h>
 #include <assert.h>
 
-#include <misc/printk.h>
+#include <sys/printk.h>
 
 #include "protocol.h"
 #include "if.h"

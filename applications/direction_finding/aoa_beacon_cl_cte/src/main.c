@@ -8,8 +8,8 @@
 
 #include <zephyr/types.h>
 #include <stddef.h>
-#include <misc/printk.h>
-#include <misc/util.h>
+#include <sys/printk.h>
+#include <sys/util.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
@@ -74,7 +74,7 @@ static void bt_ready_clb(int err)
 	printk("[BT] - Initialization finished\n");
 
 	/* Start advertising */
-	err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_USE_IDENTITY,BT_ADV_INTERVAL,BT_ADV_INTERVAL),
+	err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_USE_IDENTITY,BT_ADV_INTERVAL,BT_ADV_INTERVAL,NULL),
 			      NULL, 0, sd, ARRAY_SIZE(sd));
 	if (err) {
 		printk("[BT] - Advertising failed to start (err %d)\n", err);
