@@ -42,7 +42,7 @@ static void led_transition_start(struct led_ctx *led)
 	 * state is "on":
 	 */
 	dk_set_led(led_idx, true);
-	k_delayed_work_submit(&led->work, led->remaining);
+	k_delayed_work_submit(&led->work, K_MSEC(led->remaining));
 	led->remaining = 0;
 }
 
@@ -70,7 +70,8 @@ static void led_set(struct bt_mesh_onoff_srv *srv, struct bt_mesh_msg_ctx *ctx,
 	led->remaining = set->transition->time;
 
 	if (set->transition->delay > 0) {
-		k_delayed_work_submit(&led->work, set->transition->delay);
+		k_delayed_work_submit(&led->work,
+				      K_MSEC(set->transition->delay));
 	} else if (set->transition->time > 0) {
 		led_transition_start(led);
 	} else {
@@ -115,7 +116,7 @@ static struct bt_mesh_cfg_srv cfg_srv = {
 	.beacon = BT_MESH_BEACON_ENABLED,
 	.frnd = IS_ENABLED(CONFIG_BT_MESH_FRIEND),
 	.gatt_proxy = IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY),
-	.default_ttl = BT_MESH_TTL_DEFAULT,
+	.default_ttl = 7,
 
 	/* 3 transmissions with 20ms interval */
 	.net_transmit = BT_MESH_TRANSMIT(2, 20),

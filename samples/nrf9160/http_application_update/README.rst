@@ -21,14 +21,16 @@ The downloaded image must be signed for use by MCUboot with imgtool.
 Requirements
 ************
 
-* The following development board:
+The sample supports the following development kit:
 
-  * |nRF9160DK|
+.. include:: /includes/boardname_tables/sample_boardnames.txt
+   :start-after: set5_start
+   :end-before: set5_end
 
-* A signed firmware image that is available for download from an HTTP server.
-  This image is automatically generated when building the application.
+The sample also requires a signed firmware image that is available for download from an HTTP server.
+This image is automatically generated when building the application.
 
-* .. include:: /includes/spm.txt
+.. include:: /includes/spm.txt
 
 
 Building and running
@@ -38,7 +40,7 @@ Building and running
 
 .. include:: /includes/build_and_run.txt
 
-The sample is built as a non-secure firmware image for the nrf9160_pca10090ns board.
+The sample is built as a non-secure firmware image for the nrf9160dk_nrf9160ns build target.
 Because of this, it automatically includes the :ref:`secure_partition_manager`.
 The sample also uses MCUboot, which is automatically built and merged into the final HEX file when building the sample.
 
@@ -110,9 +112,9 @@ From nrfxlib
   * :ref:`nrfxlib:bsdlib`
 
 From Zephyr
-  * :ref:`zephyr:flash_interface`
-  * :ref:`zephyr:logger`
-  * :ref:`zephyr:gpio`
+  * :ref:`zephyr:flash_api`
+  * :ref:`zephyr:logging_api`
+  * :ref:`zephyr:gpio_api`
 
 From MCUboot
   * `MCUboot`_

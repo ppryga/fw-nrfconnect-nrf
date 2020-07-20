@@ -10,12 +10,12 @@
 #include <zephyr.h>
 #include <net/coap.h>
 #include <net/socket.h>
-#include <lte_lc.h>
+#include <modem/lte_lc.h>
 #if defined(CONFIG_LWM2M_CARRIER)
 #include <lwm2m_carrier.h>
 #endif
 
-#define APP_COAP_SEND_INTERVAL_MS K_MSEC(5000)
+#define APP_COAP_SEND_INTERVAL_MS 5000
 #define APP_COAP_MAX_MSG_LEN 1280
 #define APP_COAP_VERSION 1
 

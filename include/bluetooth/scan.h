@@ -137,7 +137,7 @@ struct bt_filter_status {
  */
 struct bt_scan_adv_info {
 	/** BLE advertising type. According to
-	 * Bluetooth Specification 7.8.5
+	 *  Bluetooth Specification 7.8.5
 	 */
 	u8_t adv_type;
 
@@ -290,6 +290,13 @@ struct bt_scan_device_info {
 
 	/** Connection parameters for LE connection. */
 	const struct bt_le_conn_param *conn_param;
+
+	/** Received advertising data. If further
+	 *  data proccesing is needed, you should
+	 *  use @em bt_data_parse() to get specific
+	 *  advertising data type.
+	 */
+	struct net_buf_simple *adv_data;
 };
 
 /** @brief Initializing macro for scanning module.
@@ -438,7 +445,7 @@ void bt_scan_update_init_conn_params(struct bt_le_conn_param *new_conn_param);
  * @param[in] mode Filter mode: @ref BT_SCAN_FILTER_MODE.
  * @param[in] match_all If this flag is set, all types of enabled filters
  *                      must be matched before generating
- *                      @ref BT_SCAN_EVT_FILTER_MATCH to the main
+ *                      @em BT_SCAN_EVT_FILTER_MATCH to the main
  *                      application. Otherwise, it is enough to
  *                      match one filter to trigger the filter match event.
  *

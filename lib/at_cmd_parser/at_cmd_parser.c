@@ -12,7 +12,7 @@
 #include <zephyr.h>
 #include <zephyr/types.h>
 
-#include <at_cmd_parser/at_cmd_parser.h>
+#include <modem/at_cmd_parser.h>
 #include "at_utils.h"
 
 #define AT_CMD_MAX_ARRAY_SIZE 32
@@ -21,6 +21,7 @@ enum at_parser_state {
 	IDLE,
 	ARRAY,
 	STRING,
+	QUOTED_STRING,
 	NUMBER,
 	SMS_PDU,
 	NOTIFICATION,
@@ -80,7 +81,7 @@ static int at_parse_detect_type(const char **str, int index)
 		set_new_state(NUMBER);
 
 	} else if (is_dblquote(*tmpstr)) {
-		set_new_state(STRING);
+		set_new_state(QUOTED_STRING);
 		tmpstr++;
 	} else if (is_array_start(*tmpstr)) {
 		set_new_state(ARRAY);
@@ -159,8 +160,18 @@ static int at_parse_process_element(const char **str, int index,
 	} else if (state == STRING) {
 		const char *start_ptr = tmpstr;
 
-		while (!is_dblquote(*tmpstr) && !is_terminated(*tmpstr) &&
-		       !is_lfcr(*tmpstr)) {
+		while (!is_lfcr(*tmpstr) && !is_terminated(*tmpstr)) {
+			tmpstr++;
+		}
+
+		at_params_string_put(list, index, start_ptr,
+				     tmpstr - start_ptr);
+
+		tmpstr++;
+	} else if (state == QUOTED_STRING) {
+		const char *start_ptr = tmpstr;
+
+		while (!is_dblquote(*tmpstr) && !is_terminated(*tmpstr)) {
 			tmpstr++;
 		}
 
@@ -214,7 +225,7 @@ static int at_parse_process_element(const char **str, int index,
 	} else if (state == SMS_PDU) {
 		const char *start_ptr = tmpstr;
 
-		while (isxdigit(*tmpstr)) {
+		while (isxdigit((int)*tmpstr)) {
 			tmpstr++;
 		}
 
@@ -241,7 +252,7 @@ static int at_parse_param(const char **at_params_str,
 	reset_state();
 
 	while ((!is_terminated(*str)) && (index < max_params)) {
-		if (isspace(*str)) {
+		if (isspace((int)*str)) {
 			str++;
 		}
 

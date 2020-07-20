@@ -13,11 +13,13 @@ The sample connects to an MQTT broker and publishes whatever data it receives on
 Requirements
 ************
 
-* The following development board:
+The sample supports the following development kit:
 
-  * |nRF9160DK|
+.. include:: /includes/boardname_tables/sample_boardnames.txt
+   :start-after: set5_start
+   :end-before: set5_end
 
-* .. include:: /includes/spm.txt
+.. include:: /includes/spm.txt
 
 Building and running
 ********************
@@ -59,9 +61,16 @@ From nrfxlib
   * :ref:`nrfxlib:bsdlib`
 
 From Zephyr
-  * :ref:`MQTT <zephyr:networking_reference>`
+  * :ref:`MQTT <zephyr:networking_api>`
 
 In addition, it uses the following samples:
 
 From |NCS|
   * :ref:`secure_partition_manager`
+
+References
+**********
+
+See the following page for information about how to enable Transport Security Layer in the Simple MQTT sample:
+
+    * `Enabling and testing TLS in mqtt_simple`_

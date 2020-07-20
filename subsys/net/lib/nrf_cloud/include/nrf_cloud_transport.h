@@ -7,7 +7,7 @@
 #ifndef NRF_CLOUD_TRANSPORT_H__
 #define NRF_CLOUD_TRANSPORT_H__
 
-#include <nrf_cloud.h>
+#include <net/nrf_cloud.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,21 +36,24 @@ enum nct_cc_opcode {
 
 struct nct_dc_data {
 	struct nrf_cloud_data data;
+	struct nrf_cloud_topic topic;
 	u32_t id;
 };
 
 struct nct_cc_data {
 	struct nrf_cloud_data data;
+	struct nrf_cloud_topic topic;
 	u32_t id;
 	enum nct_cc_opcode opcode;
 };
 
 struct nct_evt {
-	u32_t status;
+	s32_t status;
 	union {
 		struct nct_cc_data *cc;
 		struct nct_dc_data *dc;
 		u32_t data_id;
+		u8_t flag;
 	} param;
 	enum nct_evt_type type;
 };
@@ -110,6 +113,12 @@ void nct_dc_endpoint_get(struct nrf_cloud_data *tx_endpoint,
 
 /**@brief Needed for keep alive. */
 void nct_process(void);
+
+/**
+ * @brief Helper function to determine when next keep alive message should be
+ *        sent. Can be used for instance as a source for `poll` timeout.
+ */
+int nct_keepalive_time_left(void);
 
 /**@brief Input from the cloud module. */
 int nct_input(const struct nct_evt *evt);

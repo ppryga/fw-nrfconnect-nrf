@@ -6,21 +6,21 @@
 
 #include <zephyr.h>
 #include <ctype.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <stdio.h>
 #include <net/lwm2m.h>
-#include <net/bsdlib.h>
+#include <modem/bsdlib.h>
 #include <settings/settings.h>
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(app_lwm2m_client, CONFIG_APP_LOG_LEVEL);
 
-#include <at_cmd.h>
-#include <lte_lc.h>
+#include <modem/at_cmd.h>
+#include <modem/lte_lc.h>
 
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 #if defined(CONFIG_MODEM_KEY_MGMT)
-#include <modem_key_mgmt.h>
+#include <modem/modem_key_mgmt.h>
 #endif
 #endif
 
@@ -32,7 +32,7 @@ LOG_MODULE_REGISTER(app_lwm2m_client, CONFIG_APP_LOG_LEVEL);
 #error "Missing CONFIG_LTE_LINK_CONTROL"
 #endif
 
-BUILD_ASSERT_MSG(sizeof(CONFIG_APP_LWM2M_SERVER) > 1,
+BUILD_ASSERT(sizeof(CONFIG_APP_LWM2M_SERVER) > 1,
 		 "CONFIG_APP_LWM2M_SERVER must be set in prj.conf");
 
 #define APP_BANNER "Run LWM2M client"
@@ -187,6 +187,9 @@ static void rd_client_event(struct lwm2m_ctx *client,
 		LOG_DBG("Disconnected");
 		break;
 
+	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
+		LOG_DBG("Queue mode RX window closed");
+		break;
 	}
 }
 
@@ -224,6 +227,10 @@ void main(void)
 
 	/* Setup LwM2M */
 	(void)memset(&client, 0x0, sizeof(client));
+
+	/* Workaround for improperly initialized socket fd in lwm2m engine. */
+	client.sock_fd = -1;
+
 	ret = lwm2m_setup();
 	if (ret < 0) {
 		LOG_ERR("Cannot setup LWM2M fields (%d)", ret);
@@ -266,6 +273,15 @@ void main(void)
 
 	LOG_INF("Connected to LTE network");
 	ui_led_set_pattern(UI_LTE_CONNECTED);
+
+#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
+	ret = lte_lc_psm_req(true);
+	if (ret < 0) {
+		LOG_ERR("lte_lc_psm_req, error: %d", ret);
+	} else {
+		LOG_INF("PSM mode requested");
+	}
+#endif
 
 #if defined(CONFIG_LWM2M_CONN_MON_OBJ_SUPPORT)
 	ret = lwm2m_start_connmon();

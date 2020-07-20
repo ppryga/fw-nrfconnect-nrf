@@ -14,6 +14,7 @@
 #include <sys/printk.h>
 #include <st25r3911b_nfca.h>
 #include <nfc/ndef/msg_parser.h>
+#include <nfc/ndef/le_oob_rec_parser.h>
 #include <nfc/t2t/parser.h>
 #include <nfc/t4t/isodep.h>
 #include <nfc/t4t/hl_procedure.h>
@@ -35,6 +36,8 @@
 #define NFC_T4T_ISODEP_RX_DATA_MAX_SIZE 1024
 #define NFC_T4T_APDU_MAX_SIZE 1024
 #define TAG_TYPE_4_NLEN_FIELD_SIZE 2
+
+#define NFC_NDEF_LE_OOB_REC_PARSER_BUFF_SIZE 100
 
 #define NFC_TX_DATA_LEN NFC_T4T_ISODEP_FSD
 #define NFC_RX_DATA_LEN NFC_T4T_ISODEP_FSD
@@ -159,9 +162,37 @@ static int t2t_header_read(void)
 	return err;
 }
 
+/** .. include_startingpoint_le_oob_rec_parser_rst */
+static void ndef_le_oob_rec_analyze(const struct nfc_ndef_record_desc *le_oob_rec_desc)
+{
+	int err;
+	u8_t desc_buf[NFC_NDEF_LE_OOB_REC_PARSER_BUFF_SIZE];
+	u32_t desc_buf_len = sizeof(desc_buf);
+
+	err = nfc_ndef_le_oob_rec_parse(le_oob_rec_desc, desc_buf,
+					&desc_buf_len);
+	if (err) {
+		printk("Error during NDEF LE OOB Record parsing, err: %d.\n",
+			err);
+	} else {
+		nfc_ndef_le_oob_rec_printout(
+			(struct nfc_ndef_le_oob_rec_payload_desc *) desc_buf);
+	}
+}
+/** .. include_endpoint_le_oob_rec_parser_rst */
+
+static void ndef_rec_analyze(const struct nfc_ndef_record_desc *ndef_rec_desc)
+{
+	/* Match NDEF Record with specific NDEF Record parser. */
+	if (nfc_ndef_le_oob_rec_check(ndef_rec_desc)) {
+		ndef_le_oob_rec_analyze(ndef_rec_desc);
+	}
+}
+
 static void ndef_data_analyze(const u8_t *ndef_msg_buff, size_t nfc_data_len)
 {
 	int  err;
+	struct nfc_ndef_msg_desc *ndef_msg_desc;
 	u8_t desc_buf[NFC_NDEF_PARSER_REQIRED_MEMO_SIZE_CALC(MAX_NDEF_RECORDS)];
 	size_t desc_buf_len = sizeof(desc_buf);
 
@@ -173,7 +204,13 @@ static void ndef_data_analyze(const u8_t *ndef_msg_buff, size_t nfc_data_len)
 		printk("Error during parsing a NDEF message, err: %d.\n", err);
 	}
 
-	nfc_ndef_msg_printout((struct nfc_ndef_msg_desc *) desc_buf);
+	ndef_msg_desc = (struct nfc_ndef_msg_desc *) desc_buf;
+
+	nfc_ndef_msg_printout(ndef_msg_desc);
+
+	for (size_t i = 0; i < ndef_msg_desc->record_count; i++) {
+		ndef_rec_analyze(ndef_msg_desc->record[i]);
+	}
 }
 
 static void t2t_data_read_complete(u8_t *data)
@@ -207,7 +244,7 @@ static void t2t_data_read_complete(u8_t *data)
 
 	st25r3911b_nfca_tag_sleep();
 
-	k_delayed_work_submit(&transmit_work, TRANSMIT_DELAY);
+	k_delayed_work_submit(&transmit_work, K_MSEC(TRANSMIT_DELAY));
 }
 
 static int t2t_on_data_read(const u8_t *data, size_t data_len,
@@ -300,7 +337,7 @@ static void nfc_timeout(bool tag_sleep)
 	}
 
 	/* Sleep will block processing loop. Accepted as it is short. */
-	k_sleep(ALL_REQ_DELAY);
+	k_sleep(K_MSEC(ALL_REQ_DELAY));
 
 	nfc_tag_detect(true);
 }
@@ -462,7 +499,7 @@ static void t4t_isodep_deselected(void)
 {
 	st25r3911b_nfca_tag_sleep();
 
-	k_delayed_work_submit(&transmit_work, TRANSMIT_DELAY);
+	k_delayed_work_submit(&transmit_work, K_MSEC(TRANSMIT_DELAY));
 }
 
 static const struct nfc_t4t_isodep_cb t4t_isodep_cb = {
@@ -517,7 +554,7 @@ static void t4t_hl_selected(enum nfc_t4t_hl_procedure_select type)
 	if (err) {
 		st25r3911b_nfca_tag_sleep();
 
-		k_delayed_work_submit(&transmit_work, TRANSMIT_DELAY);
+		k_delayed_work_submit(&transmit_work, K_MSEC(TRANSMIT_DELAY));
 	}
 }
 

@@ -10,31 +10,32 @@
 #include <stdbool.h>
 #include <zephyr.h>
 #include <string.h>
-#include <at_cmd.h>
-#include <at_notif.h>
-#include <at_cmd_parser/at_cmd_parser.h>
-#include <at_cmd_parser/at_params.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
+#include <modem/at_cmd_parser.h>
+#include <modem/at_params.h>
 #include <bsd.h>
-#include <lte_lc.h>
-#include <net/bsdlib.h>
+#include <modem/lte_lc.h>
+#include <modem/bsdlib.h>
 #include <net/download_client.h>
 #include <power/reboot.h>
 #include <sys/util.h>
 #include <toolchain.h>
-#include <nvs/nvs.h>
+#include <fs/nvs.h>
 #include <logging/log.h>
 #include <errno.h>
 #include <nrf_errno.h>
-#include <modem_key_mgmt.h>
+#include <modem/modem_key_mgmt.h>
 
 /* NVS-related defines */
 
 /* Multiple of FLASH_PAGE_SIZE */
-#define NVS_SECTOR_SIZE DT_FLASH_ERASE_BLOCK_SIZE
+#define NVS_SECTOR_SIZE DT_PROP(DT_CHOSEN(zephyr_flash), erase_block_size)
 /* At least 2 sectors */
 #define NVS_SECTOR_COUNT 3
 /* Start address of the filesystem in flash */
-#define NVS_STORAGE_OFFSET DT_FLASH_AREA_STORAGE_OFFSET
+#define NVS_STORAGE_OFFSET \
+	DT_REG_ADDR(DT_NODE_BY_FIXED_PARTITION_LABEL(storage))
 
 static struct nvs_fs fs = {
 	.sector_size = NVS_SECTOR_SIZE,
@@ -45,7 +46,7 @@ static struct nvs_fs fs = {
 int lwm2m_os_init(void)
 {
 	/* Initialize storage */
-	return nvs_init(&fs, DT_FLASH_DEV_NAME);
+	return nvs_init(&fs, DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
 }
 
 /* Memory management. */
@@ -135,7 +136,7 @@ static int32_t get_timeout_value(int32_t timeout,
 	 * max_timeout_ms = (int max - 1 / ticks per sec) * 1000
 	 */
 	static const int32_t max_timeout_ms =
-		K_SECONDS((INT32_MAX - 1) / CONFIG_SYS_CLOCK_TICKS_PER_SEC);
+		(INT32_MAX - 1) / CONFIG_SYS_CLOCK_TICKS_PER_SEC * MSEC_PER_SEC;
 
 	/* Avoid requesting timeouts larger than max_timeout_ms,
 	 * or they will expire immediately.
@@ -561,6 +562,7 @@ int lwm2m_os_download_connect(const char *host,
 	struct download_client_cfg config = {
 		.sec_tag = cfg->sec_tag,
 		.apn = cfg->apn,
+		.port = cfg->port,
 	};
 
 	return download_client_connect(&http_downloader, host, &config);
@@ -614,11 +616,28 @@ int lwm2m_os_download_start(const char *file, size_t from)
 	return download_client_start(&http_downloader, file, from);
 }
 
+int lwm2m_os_download_file_size_get(size_t *size)
+{
+	return download_client_file_size_get(&http_downloader, size);
+}
+
 /* LTE LC module abstractions. */
 
 int lwm2m_os_lte_link_up(void)
 {
-	return lte_lc_init_and_connect();
+	int err;
+	static bool initialized;
+
+	if (!initialized) {
+		initialized = true;
+
+		err = lte_lc_init();
+		if (err) {
+			return err;
+		}
+	}
+
+	return lte_lc_connect();
 }
 
 int lwm2m_os_lte_link_down(void)
@@ -731,19 +750,26 @@ const char *lwm2m_os_strerror(void)
 }
 
 int lwm2m_os_sec_ca_chain_exists(uint32_t sec_tag, bool *exists,
-				 uint8_t *perm_flags)
+				 uint8_t *flags)
 {
-	return modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
-				     exists, perm_flags);
+	return modem_key_mgmt_exists(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, exists, flags);
 }
 
-int lwm2m_os_sec_ca_chain_write(uint32_t sec_tag, const void *buf, uint16_t len)
+int lwm2m_os_sec_ca_chain_cmp(uint32_t sec_tag, const void *buf, size_t len)
 {
-	return modem_key_mgmt_write(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
-				    buf, len);
+	return modem_key_mgmt_cmp(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, buf, len);
 }
 
-int lwm2m_os_sec_psk_exists(uint32_t sec_tag, bool *exists, uint8_t *perm_flags)
+int lwm2m_os_sec_ca_chain_write(uint32_t sec_tag, const void *buf, size_t len)
+{
+	return modem_key_mgmt_write(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, buf, len);
+}
+
+int lwm2m_os_sec_psk_exists(uint32_t sec_tag, bool *exists,
+			    uint8_t *perm_flags)
 {
 	return modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK,
 				     exists, perm_flags);
@@ -755,15 +781,27 @@ int lwm2m_os_sec_psk_write(uint32_t sec_tag, const void *buf, uint16_t len)
 				    len);
 }
 
+int lwm2m_os_sec_psk_delete(uint32_t sec_tag)
+{
+	return modem_key_mgmt_delete(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK);
+}
+
 int lwm2m_os_sec_identity_exists(uint32_t sec_tag, bool *exists,
 				 uint8_t *perm_flags)
 {
-	return modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_IDENTITY,
-				     exists, perm_flags);
+	return modem_key_mgmt_exists(sec_tag,
+		MODEM_KEY_MGMT_CRED_TYPE_IDENTITY, exists, perm_flags);
 }
 
-int lwm2m_os_sec_identity_write(uint32_t sec_tag, const void *buf, uint16_t len)
+int lwm2m_os_sec_identity_write(uint32_t sec_tag, const void *buf,
+				uint16_t len)
 {
 	return modem_key_mgmt_write(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_IDENTITY,
 				    buf, len);
+}
+
+int lwm2m_os_sec_identity_delete(uint32_t sec_tag)
+{
+	return modem_key_mgmt_delete(sec_tag,
+				     MODEM_KEY_MGMT_CRED_TYPE_IDENTITY);
 }

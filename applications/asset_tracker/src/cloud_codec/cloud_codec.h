@@ -206,7 +206,7 @@ int cloud_encode_data(const struct cloud_channel_data *channel,
 /**
  * @brief Decode cloud data.
  *
- * @param output Pointer to the cloud data input.
+ * @param input Pointer to the cloud data input.
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
@@ -222,17 +222,38 @@ int cloud_decode_command(char const *input);
 int cloud_decode_init(cloud_cmd_cb_t cb);
 
 /**
- * @brief Encode data to be transmitted to the digital twin,
- *	  from sensor data structure to a cloud data structure
- *	  containing a JSON string.
+ * @brief Encode device status data to be transmitted to the
+ *        digital twin.
  *
- * @param sensor Pointer to sensor data.
+ * @param modem_param Pointer to optional modem parameter data.
+ * @param ui Pointer to array of cloud data channel name
+ *           strings.
+ * @param ui_count Size of the ui array.
+ * @param fota Pointer to array of FOTA services.
+ * @param fota_count Size of the fota array.
+ * @param fota_version Version of the FOTA service.
  * @param output Pointer to encoded data structure.
  *
- * @return 0 if the operation was successful, otherwise a (negative) error code.
+ * @return 0 if the operation was successful, otherwise a
+ *         (negative) error code.
  */
-int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
-				   struct cloud_msg *output);
+int cloud_encode_device_status_data(
+	void *modem_param,
+	const char *const ui[], const u32_t ui_count,
+	const char *const fota[], const u32_t fota_count,
+	const u16_t fota_version,
+	struct cloud_msg *output);
+
+/**
+ * @brief Encode device config data to be transmitted to the
+ *        shadow/digital twin.
+ *
+ * @param output Pointer to encoded data structure.
+ *
+ * @return 0 if the operation was successful, otherwise a
+ *         (negative) error code.
+ */
+int cloud_encode_config_data(struct cloud_msg *output);
 
 /**
  * @brief Releases memory used by cloud data structure.
@@ -260,13 +281,34 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 /**
  * @brief Checks if data could be sent to the cloud based on config.
  *
- * @param channel The cloud channel type..
+ * @param channel The cloud channel type.
  * @param value Current data value for channel.
  *
  * @return true If the data should be sent to the cloud.
  */
 bool cloud_is_send_allowed(const enum cloud_channel channel,
 			   const double value);
+
+/**
+ * @brief Gets the enable state of the specified cloud channel.
+ *
+ * @param channel The cloud channel type.
+ *
+ * @return cloud_cmd_state The enable state.
+ */
+enum cloud_cmd_state cloud_get_channel_enable_state(
+				  const enum cloud_channel channel);
+
+/**
+ * @brief Sets the enable state of the specified cloud channel.
+ *
+ * @param channel The cloud channel type.
+ * @param state   The desired enable state.
+ */
+void cloud_set_channel_enable_state(
+				  const enum cloud_channel channel,
+				  const enum cloud_cmd_state state);
+
 /**
  * @}
  */

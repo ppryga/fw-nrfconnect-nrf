@@ -17,10 +17,11 @@
 #include <string.h>
 
 #include <zephyr.h>
-#include <flash.h>
+#include <drivers/flash.h>
 #include <pm_config.h>
 #include <logging/log.h>
 #include <dfu/mcuboot.h>
+#include <dfu/dfu_target.h>
 #include <dfu/flash_img.h>
 #include <settings/settings.h>
 
@@ -31,7 +32,8 @@ LOG_MODULE_REGISTER(dfu_target_mcuboot, CONFIG_DFU_TARGET_LOG_LEVEL);
 
 static struct flash_img_context flash_img;
 
-int dfu_ctx_mcuboot_set_b1_file(char *file, bool s0_active, char **update)
+int dfu_ctx_mcuboot_set_b1_file(const char *file, bool s0_active,
+				const char **update)
 {
 	if (file == NULL || update == NULL) {
 		return -EINVAL;
@@ -75,7 +77,9 @@ static int store_flash_img_context(void)
 {
 	if (IS_ENABLED(CONFIG_DFU_TARGET_MCUBOOT_SAVE_PROGRESS)) {
 		char key[] = MODULE "/" FILE_FLASH_IMG;
-		int err = settings_save_one(key, &flash_img, sizeof(flash_img));
+		size_t bytes_written = flash_img_bytes_written(&flash_img);
+		int err = settings_save_one(key, &bytes_written,
+					    sizeof(bytes_written));
 
 		if (err) {
 			LOG_ERR("Problem storing offset (err %d)", err);
@@ -95,9 +99,11 @@ static int settings_set(const char *key, size_t len_rd,
 			settings_read_cb read_cb, void *cb_arg)
 {
 	if (!strcmp(key, FILE_FLASH_IMG)) {
-		ssize_t len = read_cb(cb_arg, &flash_img,
-				      sizeof(flash_img));
-		if (len != sizeof(flash_img)) {
+		size_t bytes_written = flash_img_bytes_written(&flash_img);
+		ssize_t len = read_cb(cb_arg, &bytes_written,
+				      sizeof(bytes_written));
+
+		if (len != sizeof(bytes_written)) {
 			LOG_ERR("Can't read flash_img from storage");
 			return len;
 		}
@@ -112,8 +118,9 @@ bool dfu_target_mcuboot_identify(const void *const buf)
 	return *((const u32_t *)buf) == MCUBOOT_HEADER_MAGIC;
 }
 
-int dfu_target_mcuboot_init(size_t file_size)
+int dfu_target_mcuboot_init(size_t file_size, dfu_target_callback_t cb)
 {
+	ARG_UNUSED(cb);
 	int err = flash_img_init(&flash_img);
 
 	if (err != 0) {
@@ -122,7 +129,8 @@ int dfu_target_mcuboot_init(size_t file_size)
 	}
 
 	if (file_size > PM_MCUBOOT_SECONDARY_SIZE) {
-		LOG_ERR("Requested file too big to fit in flash");
+		LOG_ERR("Requested file too big to fit in flash %zu > 0x%x",
+			file_size, PM_MCUBOOT_SECONDARY_SIZE);
 		return -EFBIG;
 	}
 

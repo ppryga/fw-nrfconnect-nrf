@@ -8,16 +8,17 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <logging/log.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <string.h>
 #include <init.h>
-#include <at_cmd.h>
-#include <at_notif.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 
 LOG_MODULE_REGISTER(at_host, CONFIG_AT_HOST_LOG_LEVEL);
 
 /* Stack definition for AT host workqueue */
-#define AT_HOST_STACK_SIZE 512
+#define AT_HOST_STACK_SIZE 1024
+
 K_THREAD_STACK_DEFINE(at_host_stack_area, AT_HOST_STACK_SIZE);
 
 #define CONFIG_UART_0_NAME      "UART_0"
@@ -60,7 +61,7 @@ static struct k_work cmd_send_work;
 
 
 
-static inline void write_uart_string(char *str)
+static inline void write_uart_string(const char *str)
 {
 	/* Send characters until, but not including, null */
 	for (size_t i = 0; str[i]; i++) {
@@ -68,7 +69,7 @@ static inline void write_uart_string(char *str)
 	}
 }
 
-static void response_handler(void *context, char *response)
+static void response_handler(void *context, const char *response)
 {
 	ARG_UNUSED(context);
 
@@ -238,7 +239,7 @@ static int at_uart_init(char *uart_dev_name)
 			while (uart_fifo_read(uart_dev, &dummy, 1)) {
 				/* Do nothing with the data */
 			}
-			k_sleep(10);
+			k_sleep(K_MSEC(10));
 		}
 	} while (err);
 

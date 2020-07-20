@@ -46,7 +46,7 @@ extern "C" {
 #define BT_MESH_PLVL_MSG_LEN_DEFAULT_GET 0
 #define BT_MESH_PLVL_MSG_LEN_DEFAULT_STATUS 2
 #define BT_MESH_PLVL_MSG_LEN_RANGE_GET 0
-#define BT_MESH_PLVL_MSG_LEN_RANGE_STATUS 4
+#define BT_MESH_PLVL_MSG_LEN_RANGE_STATUS 5
 #define BT_MESH_PLVL_MSG_LEN_DEFAULT_SET 2
 #define BT_MESH_PLVL_MSG_LEN_RANGE_SET 4
 /** @endcond */
@@ -70,7 +70,7 @@ struct bt_mesh_plvl_status {
 	/** Target Power Level. */
 	u16_t target;
 	/**
-	 * Time remaining of the ongoing transition, or @ref K_FOREVER.
+	 * Time remaining of the ongoing transition, or @em K_FOREVER.
 	 * If there's no ongoing transition, @c remaining_time is 0.
 	 */
 	s32_t remaining_time;

@@ -97,8 +97,31 @@ static void scan_connecting(struct bt_scan_device_info *device_info,
 {
 	default_conn = bt_conn_ref(conn);
 }
+/** .. include_startingpoint_scan_rst */
+static void scan_filter_no_match(struct bt_scan_device_info *device_info,
+				 bool connectable)
+{
+	int err;
+	struct bt_conn *conn;
+	char addr[BT_ADDR_LE_STR_LEN];
 
-BT_SCAN_CB_INIT(scan_cb, scan_filter_match, NULL,
+	if (device_info->adv_info.adv_type == BT_GAP_ADV_TYPE_ADV_DIRECT_IND) {
+		bt_addr_le_to_str(device_info->addr, addr, sizeof(addr));
+		printk("Direct advertising received from %s\n", addr);
+		bt_scan_stop();
+
+		err = bt_conn_le_create(device_info->addr,
+					BT_CONN_LE_CREATE_CONN,
+					device_info->conn_param, &conn);
+
+		if (!err) {
+			default_conn = bt_conn_ref(conn);
+			bt_conn_unref(conn);
+		}
+	}
+}
+/** .. include_endpoint_scan_rst */
+BT_SCAN_CB_INIT(scan_cb, scan_filter_match, scan_filter_no_match,
 		scan_connecting_error, scan_connecting);
 
 static void discovery_completed_cb(struct bt_gatt_dm *dm,
@@ -399,6 +422,12 @@ static void button_bootmode(void)
 	}
 }
 
+static void hidc_write_cb(struct bt_gatt_hids_c *hidc,
+			  struct bt_gatt_hids_c_rep_info *rep,
+			  u8_t err)
+{
+	printk("Caps lock sent\n");
+}
 
 static void button_capslock(void)
 {
@@ -421,7 +450,9 @@ static void button_capslock(void)
 	data = capslock_state ? 0x02 : 0;
 	err = bt_gatt_hids_c_rep_write_wo_rsp(&hids_c,
 					      hids_c.rep_boot.kbd_out,
-					      &data, sizeof(data));
+					      &data, sizeof(data),
+					      hidc_write_cb);
+
 	if (err) {
 		printk("Keyboard data write error (err: %d)\n", err);
 		return;

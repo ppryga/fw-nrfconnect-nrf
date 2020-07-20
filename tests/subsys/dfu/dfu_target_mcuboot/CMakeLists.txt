@@ -6,8 +6,7 @@
 
 cmake_minimum_required(VERSION 3.13.1)
 
-include($ENV{ZEPHYR_BASE}/../nrf/cmake/boilerplate.cmake)
-include($ENV{ZEPHYR_BASE}/cmake/app/boilerplate.cmake NO_POLICY_SCOPE)
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(json)
 
 FILE(GLOB app_sources src/*.c)
@@ -22,6 +21,7 @@ target_include_directories(app
   PRIVATE
   ${ZEPHYR_BASE}/../nrf/subsys/dfu/include
   . # To get 'pm_config.h'
+  ${ZEPHYR_BASE}/../nrf/include/dfu
   )
 
 target_compile_options(app

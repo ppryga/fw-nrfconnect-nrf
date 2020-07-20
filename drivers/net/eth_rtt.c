@@ -45,7 +45,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/net_if.h>
 #include <net/net_core.h>
 #include <net/ethernet.h>
-#include <crc.h>
+#include <sys/crc.h>
 #include <SEGGER_RTT.h>
 
 /** RTT channel name used to identify Ethernet transfer channel. */
@@ -69,7 +69,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define ACTIVE_POLL_COUNT (CONFIG_ETH_POLL_PERIOD_MS / \
 			   CONFIG_ETH_POLL_ACTIVE_PERIOD_MS)
 
-BUILD_ASSERT_MSG(CONFIG_ETH_RTT_CHANNEL < SEGGER_RTT_MAX_NUM_UP_BUFFERS,
+BUILD_ASSERT(CONFIG_ETH_RTT_CHANNEL < SEGGER_RTT_MAX_NUM_UP_BUFFERS,
 		 "RTT channel number used in RTT network driver "
 		 "must be lower than SEGGER_RTT_MAX_NUM_UP_BUFFERS");
 
@@ -416,7 +416,7 @@ static void poll_work_handler(struct k_work *work)
 {
 	struct eth_rtt_context *context = &context_data;
 	bool active = false;
-	s32_t period = K_MSEC(CONFIG_ETH_POLL_PERIOD_MS);
+	k_timeout_t period = K_MSEC(CONFIG_ETH_POLL_PERIOD_MS);
 	unsigned num;
 
 	do {
@@ -497,7 +497,7 @@ static void eth_iface_init(struct net_if *iface)
 	LOG_INF("Initialized '%s': "
 		"MAC addr %02X:%02X:%02X:%02X:%02X:%02X, "
 		"MTU %d, RTT channel %d, RAM consumed %d",
-		iface->if_dev->dev->config->name, context->mac_addr[0],
+		iface->if_dev->dev->name, context->mac_addr[0],
 		context->mac_addr[1], context->mac_addr[2],
 		context->mac_addr[3], context->mac_addr[4],
 		context->mac_addr[5], CONFIG_ETH_RTT_MTU,
@@ -544,5 +544,6 @@ static const struct ethernet_api if_api = {
 
 /** Initialization of network device driver. */
 ETH_NET_DEVICE_INIT(eth_rtt, CONFIG_ETH_RTT_DRV_NAME, eth_rtt_init,
-		    &context_data, NULL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
-		    &if_api, CONFIG_ETH_RTT_MTU);
+		    device_pm_control_nop, &context_data, NULL,
+		    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &if_api,
+		    CONFIG_ETH_RTT_MTU);

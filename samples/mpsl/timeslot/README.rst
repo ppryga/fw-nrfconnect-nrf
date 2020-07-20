@@ -22,10 +22,14 @@ The timeslot session is closed when any key is pressed in the terminal.
 Requirements
 ************
 
-* One of the nRF52 development boards. The sample has been tested on:
+One of the following development boards:
 
-  * nRF52 Development Kit (PCA10040)
-  * nRF52840 Development Kit (PCA10056)
+  * |nRF52DK|
+  * |nRF52840DK|
+  * |nRF5340DK|
+
+    .. note::
+       For the nRF5340DK this sample is only supported on the network core (nrf5340pdk_nrf5340_cpunet), and the :ref:`nrf5340_empty_app_core` sample must be flashed on the application core.
 
 Building and Running
 ********************
@@ -43,9 +47,9 @@ After programming the sample to your board, test it by performing the following 
 #. Follow the instructions in the terminal to open a session and start requesting timeslots.
    The terminal then prints the signal type for each timeslot callback:
 
-   - If you press 'a', the timeslot callback requests a new timeslot.
+   * If you press 'a', the timeslot callback requests a new timeslot.
      Observe that ``Timeslot start`` is printed until the session is closed.
-   - If you press 'b', the timeslot callback ends the timeslot.
+   * If you press 'b', the timeslot callback ends the timeslot.
      Observe that only one ``Timeslot start`` is printed, followed by a ``Session idle``.
 
 #. Press any key to close the session.
@@ -61,7 +65,7 @@ This sample uses the following `nrfxlib`_ libraries:
 In addition, it uses the following Zephyr libraries:
 
 * :file:`include/console.h`
-* :ref:`zephyr:kernel`:
+* :ref:`zephyr:kernel_api`:
 
   * :file:`include/kernel.h`
   * :file:`include/irq.h`

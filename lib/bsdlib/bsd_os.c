@@ -183,7 +183,7 @@ int32_t bsd_os_timedwait(uint32_t context, int32_t *timeout)
 	}
 
 	if (*timeout < 0) {
-		*timeout = K_FOREVER;
+		*timeout = SYS_FOREVER_MS;
 	}
 
 	sleeping_thread_init(&thread);
@@ -192,16 +192,16 @@ int32_t bsd_os_timedwait(uint32_t context, int32_t *timeout)
 		return 0;
 	}
 
-	(void)k_sem_take(&thread.sem, *timeout);
+	(void)k_sem_take(&thread.sem, SYS_TIMEOUT_MS(*timeout));
 
 	sleeping_thread_remove(&thread);
 
-	if (*timeout == K_FOREVER) {
+	if (*timeout == SYS_FOREVER_MS) {
 		return 0;
 	}
 
 	/* Calculate how much time is left until timeout. */
-	remaining = *timeout - (k_uptime_get() - start);
+	remaining = *timeout - k_uptime_delta(&start);
 	*timeout = remaining > 0 ? remaining : 0;
 
 	if (*timeout == 0) {
@@ -246,6 +246,9 @@ void bsd_os_errno_set(int err_code)
 		break;
 	case NRF_EAGAIN:
 		errno = EAGAIN;
+		break;
+	case NRF_EDOM:
+		errno = EDOM;
 		break;
 	case NRF_EPROTOTYPE:
 		errno = EPROTOTYPE;
@@ -297,6 +300,9 @@ void bsd_os_errno_set(int err_code)
 		break;
 	case NRF_EINPROGRESS:
 		errno = EINPROGRESS;
+		break;
+	case NRF_EALREADY:
+		errno = EALREADY;
 		break;
 	case NRF_ECANCELED:
 		errno = ECANCELED;
@@ -404,11 +410,11 @@ void read_task_create(void)
 void trace_uart_init(void)
 {
 #ifdef CONFIG_BSD_LIBRARY_TRACE_ENABLED
-	/* UART pins are defined in "nrf9160_pca10090.dts". */
+	/* UART pins are defined in "nrf9160dk_nrf9160.dts". */
 	const nrfx_uarte_config_t config = {
 		/* Use UARTE1 pins routed on VCOM2. */
-		.pseltxd = DT_NORDIC_NRF_UARTE_UART_1_TX_PIN,
-		.pselrxd = DT_NORDIC_NRF_UARTE_UART_1_RX_PIN,
+		.pseltxd = DT_PROP(DT_NODELABEL(uart1), tx_pin),
+		.pselrxd = DT_PROP(DT_NODELABEL(uart1), rx_pin),
 		.pselcts = NRF_UARTE_PSEL_DISCONNECTED,
 		.pselrts = NRF_UARTE_PSEL_DISCONNECTED,
 

@@ -227,8 +227,6 @@ The following code examples shows a profiling function for the event type ``samp
 	{
 		struct sample_event *event = cast_sample_event(eh);
 
-		/* ARG_UNUSED to suppress warning when profiling is disabled. */
-		ARG_UNUSED(event);
 		profiler_log_encode_u32(buf, event->value1);
 		profiler_log_encode_u32(buf, event->value2);
 		profiler_log_encode_u32(buf, event->value3);
@@ -257,7 +255,7 @@ The following code example shows how to define the event profiling information s
 Shell integration
 *****************
 
-The Event Manager is integrated with Zephyr's :ref:`zephyr:shell_label` module.
+The Event Manager is integrated with Zephyr's :ref:`zephyr:shell_api` module.
 When the shell is turned on, an additional subcommand set (:command:`event_manager`) is added.
 
 This subcommand set contains the following commands:

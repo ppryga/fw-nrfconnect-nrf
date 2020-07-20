@@ -33,15 +33,17 @@ This is accomplished by the following steps:
      This metadata contains the full public key corresponding to the private key that was used to sign the firmware.
      The bootloader sample checks the public key against a set of provisioned keys.
      Note that to save space, only the hashes of the provisioned keys are stored, and only the hashes of the keys are compared.
-     If the public key in the metadata matches one of the provisioned public key hashes, the image is considered valid.
-     If the public key does not match any of the provisioned hashes, validation fails.
+     If the public key in the metadata matches one of the valid provisioned public key hashes, the image is considered valid.
+     All public key hashes at lower indices than the matching hash are permanently invalidated at this point, which means that images can no longer be validated with those public keys.
+     For example, if an image is successfully validated with the public key at index 2, the public keys 0 and 1 are invalidated.
+     This mechanism can be used to decommission broken keys.
+     If the public key does not match any of the still valid provisioned hashes, validation fails.
 
 #. Boot the next stage in the boot chain.
     After verifying the next boot stage, the bootloader sample uninitializes all peripherals that it used and boots the next boot stage.
 
 #. Share the cryptographic library over EXT_API.
-     The bootloader sample does not contain any flash writing code.
-     Therefore, it is safe to share some of its functionality through an External API (EXT_API, see :ref:`doc_fw_info_ext_api`).
+     The bootloader shares some of its functionality through an external API (EXT_API, see :ref:`doc_fw_info_ext_api`).
      For more information, see :file:`bl_crypto.h`.
 
 
@@ -57,26 +59,43 @@ The bootloader sample defines four main areas:
 #. **S0** - One of two potential storage areas for the second stage bootloader.
 #. **S1** - One of two potential storage areas for the second stage bootloader.
 
+
+.. _bootloader_provisioning:
+
 Provisioning
 ============
 
 The public key hashes are not compiled in with the source code of the bootloader sample.
-Instead, they are stored in a separate memory region through a process called *provisioning*.
+Instead, they must be stored in a separate memory region through a process called *provisioning*.
 
-By default, the bootloader sample will automatically generate and provision public keys for the specified private key.
-To facilitate the manufacturing process of a device with the bootloader sample, it is possible to decouple this process and program the sample HEX file and the HEX file containing the public key hashes separately.
+By default, the bootloader sample will automatically generate and provision public key hashes directly into the bootloader HEX file, based on the specified private key and additional public keys.
+Alternatively, to facilitate the manufacturing process of a device with the bootloader sample, it is possible to decouple this process and program the sample HEX file and the HEX file containing the public key hashes separately.
 If you choose to do so, use the Python scripts in ``scripts\bootloader`` to create and provision the keys manually.
 
+   .. note::
+      On some chips (for example, nRF9160 or nRF5340), the provisioned data is held in the OTP region in UICR.
+      Because of this, you must erase the UICR before programming the bootloader.
+      On nRF9160, the UICR can only be erased by erasing the whole chip.
+      To do so on the command line, call ``west flash`` with the ``--erase`` option.
+      This will erase the whole chip before programming the new image.
+      In |SES|, choose :guilabel:`Target` > :guilabel:`Connect J-Link` and then :guilabel:`Target` > :guilabel:`Erase All` to erase the whole chip.
+
+   .. note::
+      On some chips (for example, nRF9160 or nRF5340), the provisioned data is held in the OTP region in UICR.
+      Because of this, the public key hash cannot contain half-words with the value 0xFFFF, because half-words are writeable when they are 0xFFFF, so such hashes cannot be guaranteed to be immutable.
+      The bootloader will refuse to boot if any hash contains a half-word with the value 0xFFFF.
+      If your public key hash is found to have 0xFFFF, please regenerate it or use another public key.
+
+The bootloader uses the :ref:`doc_bl_storage` library to access provisioned data.
 
 Requirements
 ************
 
-* One of the following development boards:
+The sample supports the following development kits:
 
-  * |nRF9160DK|
-  * |nRF52840DK|
-  * |nRF52DK|
-  * |nRF51DK|
+.. include:: /includes/boardname_tables/sample_boardnames.txt
+   :start-after: set16_start
+   :end-before: set16_end
 
 .. _bootloader_build_and_run:
 
@@ -149,8 +168,8 @@ This sample uses the following |NCS| libraries:
 * :ref:`partition_manager`
 * :ref:`doc_fw_info`
 * :ref:`fprotect_readme`
-* ``include/bl_validation.h``
-* ``include/bl_crypto.h``
-* ``subsys/bootloader/include/provision.h``
+* :ref:`doc_bl_crypto`
+* :ref:`doc_bl_validation`
+* :ref:`doc_bl_storage`
 
 The sample also uses drivers from nrfx.

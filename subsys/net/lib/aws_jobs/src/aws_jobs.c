@@ -131,6 +131,17 @@ static int reg_topic(struct mqtt_client *const client, u8_t *topic_buf,
 	return mqtt_unsubscribe(client, &subscription_list);
 }
 
+
+int aws_jobs_create_topic_notify_next(struct mqtt_client *const client,
+					 u8_t *topic_buf)
+{
+	struct mqtt_topic topic;
+
+	return construct_topic(client->client_id.utf8, "",
+			       &TOPIC_NOTIFY_NEXT_CONF, topic_buf, &topic,
+			       false);
+}
+
 int aws_jobs_subscribe_topic_notify_next(struct mqtt_client *const client,
 					 u8_t *topic_buf)
 {
@@ -143,6 +154,15 @@ int aws_jobs_unsubscribe_topic_notify_next(struct mqtt_client *const client,
 	return reg_topic(client, topic_buf, &TOPIC_NOTIFY_NEXT_CONF, "", false);
 }
 
+int aws_jobs_create_topic_notify(struct mqtt_client *const client,
+				 u8_t *topic_buf)
+{
+	struct mqtt_topic topic;
+
+	return construct_topic(client->client_id.utf8, "",
+			       &TOPIC_NOTIFY_CONF, topic_buf, &topic, false);
+}
+
 int aws_jobs_subscribe_topic_notify(struct mqtt_client *const client,
 				    u8_t *topic_buf)
 {
@@ -153,6 +173,15 @@ int aws_jobs_unsubscribe_topic_notify(struct mqtt_client *const client,
 				      u8_t *topic_buf)
 {
 	return reg_topic(client, topic_buf, &TOPIC_NOTIFY_CONF, "", false);
+}
+
+int aws_jobs_create_topic_get(struct mqtt_client *const client,
+				 const u8_t *job_id, u8_t *topic_buf)
+{
+	struct mqtt_topic topic;
+
+	return construct_topic(client->client_id.utf8, job_id,
+			       &TOPIC_GET_CONF, topic_buf, &topic, false);
 }
 
 int aws_jobs_subscribe_topic_get(struct mqtt_client *const client,
@@ -217,7 +246,7 @@ int aws_jobs_update_job_execution(struct mqtt_client *const client,
 				  const u8_t *client_token, u8_t *topic_buf)
 {
 	/* The rest of the parameters are checked later */
-	if (status_details == NULL || client_token == NULL) {
+	if (client_token == NULL) {
 		return -EINVAL;
 	}
 
@@ -229,7 +258,8 @@ int aws_jobs_update_job_execution(struct mqtt_client *const client,
 
 	int ret = snprintf(update_job_payload, sizeof(update_job_payload),
 			   UPDATE_JOB_PAYLOAD, execution_status_strings[status],
-			   status_details, expected_version, client_token);
+			   (status_details ? (char *)status_details : "null"),
+			   expected_version, client_token);
 
 	if (ret >= CONFIG_UPDATE_JOB_PAYLOAD_LEN) {
 		LOG_ERR("Unable to fit formated string in provided buffer.");
@@ -278,4 +308,3 @@ bool aws_jobs_cmp(const char *sub, const char *pub, size_t pub_len,
 		return ret == 0;
 	}
 }
-

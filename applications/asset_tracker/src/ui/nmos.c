@@ -6,8 +6,8 @@
 
 #include <zephyr.h>
 #include <sys/util.h>
-#include <gpio.h>
-#include <pwm.h>
+#include <drivers/gpio.h>
+#include <drivers/pwm.h>
 
 #include "ui.h"
 
@@ -56,14 +56,13 @@ static int pwm_out(u32_t pin, u32_t period_us, u32_t duty_cycle_us)
 	 * disables the PWM, but not before the current period is finished.
 	 */
 	if (current_period_us != period_us) {
-		pwm_pin_set_usec(pwm_dev, pin, current_period_us, 0);
-		k_sleep(MAX(K_MSEC(current_period_us / USEC_PER_MSEC),
-			    K_MSEC(1)));
+		pwm_pin_set_usec(pwm_dev, pin, current_period_us, 0, 0);
+		k_sleep(K_MSEC(MAX((current_period_us / USEC_PER_MSEC), 1)));
 	}
 
 	current_period_us = period_us;
 
-	return pwm_pin_set_usec(pwm_dev, pin, period_us, duty_cycle_us);
+	return pwm_pin_set_usec(pwm_dev, pin, period_us, duty_cycle_us, 0);
 }
 
 #ifdef CONFIG_DEVICE_POWER_MANAGEMENT
@@ -130,12 +129,12 @@ static int configure_gpio(u32_t pin)
 {
 	int err;
 
-	err = gpio_pin_configure(gpio_dev, pin, GPIO_DIR_OUT);
+	err = gpio_pin_configure(gpio_dev, pin, GPIO_OUTPUT);
 	if (err) {
 		return err;
 	}
 
-	err = gpio_pin_write(gpio_dev, pin, 0);
+	err = gpio_pin_set_raw(gpio_dev, pin, 0);
 	if (err) {
 		return err;
 	}
@@ -164,10 +163,10 @@ int ui_nmos_init(void)
 {
 	int err = 0;
 
-	gpio_dev = device_get_binding(DT_NORDIC_NRF_GPIO_GPIO_0_LABEL);
+	gpio_dev = device_get_binding(DT_LABEL(DT_NODELABEL(gpio0)));
 	if (!gpio_dev) {
 		LOG_ERR("Could not bind to device %s",
-			log_strdup(DT_NORDIC_NRF_GPIO_GPIO_0_LABEL));
+			log_strdup(DT_LABEL(DT_NODELABEL(gpio0))));
 		return -ENODEV;
 	}
 
@@ -196,6 +195,7 @@ int ui_nmos_init(void)
 		pwm_pin_set_usec(pwm_dev,
 				 nmos_pins[i].pin,
 				 DEFAULT_PERIOD_US,
+				 0,
 				 0);
 	}
 
@@ -243,7 +243,7 @@ int ui_nmos_write(size_t nmos_idx, u8_t value)
 
 	value = (value == 0) ? 0 : 1;
 
-	err = gpio_pin_write(gpio_dev, nmos_pins[nmos_idx].pin, value);
+	err = gpio_pin_set_raw(gpio_dev, nmos_pins[nmos_idx].pin, value);
 	if (err) {
 		LOG_ERR("Setting GPIO state failed, error: %d", err);
 		return err;

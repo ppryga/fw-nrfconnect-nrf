@@ -8,7 +8,7 @@
 #include <string.h>
 #include <kernel.h>
 #include <zephyr/types.h>
-#include <atomic.h>
+#include <sys/atomic.h>
 #include <nfc/t4t/isodep.h>
 #include <logging/log.h>
 
@@ -870,7 +870,7 @@ int nfc_t4t_isodep_transmit(const u8_t *data, size_t data_len)
 			LOG_DBG("Wait %d ms before sending first frame after ATS Response",
 				delay);
 
-			return k_delayed_work_submit(&isodep_work, delay);
+			return k_delayed_work_submit(&isodep_work, K_MSEC(delay));
 		}
 	}
 

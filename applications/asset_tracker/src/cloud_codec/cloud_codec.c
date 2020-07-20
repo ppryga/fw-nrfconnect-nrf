@@ -12,11 +12,15 @@
 #include <zephyr.h>
 #include <zephyr/types.h>
 #include <net/cloud.h>
+#if defined(CONFIG_BSD_LIBRARY)
+#include <modem/modem_info.h>
+#endif /* CONFIG_BSD_LIBRARY */
 
 #include "cJSON.h"
 #include "cJSON_os.h"
 #include "cloud_codec.h"
 
+#include "service_info.h"
 #include "env_sensors.h"
 
 #include <logging/log.h>
@@ -161,6 +165,18 @@ static CMD_NEW_GROUP(group_get, CLOUD_CMD_GROUP_GET, CMD_ARRAY(
 		CMD_NEW_CHAN(CLOUD_CHANNEL_DEVICE_INFO, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_EMPTY)
 			)
+		),
+		CMD_NEW_CHAN(CLOUD_CHANNEL_FLIP, CMD_ARRAY(
+			CMD_NEW_TYPE(CLOUD_CMD_EMPTY)
+			)
+		),
+		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_SENSOR, CMD_ARRAY(
+			CMD_NEW_TYPE(CLOUD_CMD_EMPTY)
+			)
+		),
+		CMD_NEW_CHAN(CLOUD_CHANNEL_ENVIRONMENT, CMD_ARRAY(
+			CMD_NEW_TYPE(CLOUD_CMD_EMPTY)
+			)
 		)
 	)
 );
@@ -239,22 +255,16 @@ static const char *const cmd_type_str[] = {
 BUILD_ASSERT(ARRAY_SIZE(cmd_type_str) == CLOUD_CMD__TOTAL);
 
 static struct cloud_sensor_chan_cfg sensor_cfg[] = {
-	{ .chan = CLOUD_CHANNEL_TEMP,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } },
-	{ .chan = CLOUD_CHANNEL_HUMID,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } },
-	{ .chan = CLOUD_CHANNEL_AIR_PRESS,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } },
-	{ .chan = CLOUD_CHANNEL_AIR_QUAL,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } },
-	{ .chan = CLOUD_CHANNEL_LIGHT_RED,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } },
-	{ .chan = CLOUD_CHANNEL_LIGHT_GREEN,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } },
-	{ .chan = CLOUD_CHANNEL_LIGHT_BLUE,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } },
-	{ .chan = CLOUD_CHANNEL_LIGHT_IR,
-	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } }
+	{ .chan = CLOUD_CHANNEL_GPS },
+	{ .chan = CLOUD_CHANNEL_ENVIRONMENT },
+	{ .chan = CLOUD_CHANNEL_TEMP },
+	{ .chan = CLOUD_CHANNEL_HUMID },
+	{ .chan = CLOUD_CHANNEL_AIR_PRESS },
+	{ .chan = CLOUD_CHANNEL_AIR_QUAL },
+	{ .chan = CLOUD_CHANNEL_LIGHT_RED },
+	{ .chan = CLOUD_CHANNEL_LIGHT_GREEN },
+	{ .chan = CLOUD_CHANNEL_LIGHT_BLUE },
+	{ .chan = CLOUD_CHANNEL_LIGHT_IR }
 };
 
 static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *const cmd);
@@ -280,6 +290,18 @@ static int json_add_str(cJSON *parent, const char *str, const char *item)
 	}
 
 	return json_add_obj(parent, str, json_str);
+}
+
+static int json_add_bool(cJSON *parent, const char *str, const bool value)
+{
+	cJSON *json_bool;
+
+	json_bool = cJSON_CreateBool(value);
+	if (json_bool == NULL) {
+		return -ENOMEM;
+	}
+
+	return json_add_obj(parent, str, json_bool);
 }
 
 static cJSON *json_object_decode(cJSON *obj, const char *str)
@@ -336,27 +358,212 @@ int cloud_encode_data(const struct cloud_channel_data *channel,
 	return 0;
 }
 
-int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
+int cloud_encode_env_sensors_data(const env_sensor_data_t *sensor_data,
+				  struct cloud_msg *output)
+{
+	__ASSERT_NO_MSG(sensor_data != NULL);
+	__ASSERT_NO_MSG(output != NULL);
+
+	char buf[6];
+	u8_t len;
+	struct cloud_channel_data cloud_sensor;
+
+	switch (sensor_data->type) {
+	case ENV_SENSOR_TEMPERATURE:
+		cloud_sensor.type = CLOUD_CHANNEL_TEMP;
+		break;
+
+	case ENV_SENSOR_HUMIDITY:
+		cloud_sensor.type = CLOUD_CHANNEL_HUMID;
+		break;
+
+	case ENV_SENSOR_AIR_PRESSURE:
+		cloud_sensor.type = CLOUD_CHANNEL_AIR_PRESS;
+		break;
+
+	case ENV_SENSOR_AIR_QUALITY:
+		cloud_sensor.type = CLOUD_CHANNEL_AIR_QUAL;
+		break;
+
+	default:
+		return -1;
+	}
+
+	len = snprintf(buf, sizeof(buf), "%.1f",
+		sensor_data->value);
+	cloud_sensor.data.buf = buf;
+	cloud_sensor.data.len = len;
+
+	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
+}
+
+int cloud_encode_motion_data(const motion_data_t *motion_data,
+				  struct cloud_msg *output)
+{
+	__ASSERT_NO_MSG(motion_data != NULL);
+	__ASSERT_NO_MSG(output != NULL);
+
+	struct cloud_channel_data cloud_sensor;
+
+	cloud_sensor.type = CLOUD_CHANNEL_FLIP;
+
+	switch (motion_data->orientation) {
+	case MOTION_ORIENTATION_NORMAL:
+		cloud_sensor.data.buf = "NORMAL";
+		break;
+	case MOTION_ORIENTATION_UPSIDE_DOWN:
+		cloud_sensor.data.buf = "UPSIDE_DOWN";
+		break;
+	default:
+		return -1;
+	}
+
+	cloud_sensor.data.len = sizeof(cloud_sensor.data.buf) - 1;
+
+	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
+
+}
+
+#if CONFIG_LIGHT_SENSOR
+/* 4 32-bit ints, 3 spaces, NULL */
+#define LIGHT_SENSOR_DATA_STRING_MAX_LEN ((4 * 11) + 3 + 1)
+#define LIGHT_SENSOR_DATA_NO_UPDATE (-1)
+int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 				   struct cloud_msg *output)
 {
+	char buf[LIGHT_SENSOR_DATA_STRING_MAX_LEN];
+	u8_t len;
+	struct cloud_channel_data cloud_sensor;
+	struct light_sensor_data send = { .red = LIGHT_SENSOR_DATA_NO_UPDATE,
+					  .green = LIGHT_SENSOR_DATA_NO_UPDATE,
+					  .blue = LIGHT_SENSOR_DATA_NO_UPDATE,
+					  .ir = LIGHT_SENSOR_DATA_NO_UPDATE };
+
+	if ((sensor_data == NULL) || (output == NULL)) {
+		return -EINVAL;
+	}
+
+	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_RED, sensor_data->red)) {
+		send.red = sensor_data->red;
+	}
+
+	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_GREEN,
+				  sensor_data->green)) {
+		send.green = sensor_data->green;
+	}
+
+	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_BLUE,
+				  sensor_data->blue)) {
+		send.blue = sensor_data->blue;
+	}
+
+	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_IR, sensor_data->ir)) {
+		send.ir = sensor_data->ir;
+	}
+
+	len = snprintf(buf, sizeof(buf), "%d %d %d %d", send.red, send.green,
+		       send.blue, send.ir);
+
+	cloud_sensor.data.buf = buf;
+	cloud_sensor.data.len = len;
+	cloud_sensor.type = CLOUD_CHANNEL_LIGHT_SENSOR;
+
+	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
+}
+#endif /* CONFIG_LIGHT_SENSOR */
+
+int cloud_encode_config_data(struct cloud_msg *output)
+{
+	__ASSERT_NO_MSG(output != NULL);
+
+	cJSON *chan_obj = cJSON_CreateObject();
+	cJSON *state_obj = cJSON_CreateObject();
+	cJSON *reported_obj = cJSON_CreateObject();
+	cJSON *config_obj = cJSON_CreateObject();
+	cJSON *root_obj = cJSON_CreateObject();
 	int ret = 0;
 	char *buffer;
 
-	__ASSERT_NO_MSG(channel != NULL);
-	__ASSERT_NO_MSG(channel->data.buf != NULL);
-	__ASSERT_NO_MSG(channel->data.len != 0);
+	if (chan_obj == NULL || state_obj == NULL ||
+	    reported_obj == NULL || config_obj == NULL ||
+		root_obj == NULL) {
+		ret = -ENOMEM;
+		goto cleanup;
+	}
+
+	/* Currently, the only value that can be changed from
+	 * the device is GPS enable, so it is the only
+	 * one that needs to be sent.
+	 */
+	enum cloud_cmd_state gps_state =
+		cloud_get_channel_enable_state(CLOUD_CHANNEL_GPS);
+
+	if (gps_state != CLOUD_CMD_STATE_UNDEFINED) {
+		ret = json_add_bool(chan_obj, cmd_type_str[CLOUD_CMD_ENABLE],
+				gps_state == CLOUD_CMD_STATE_TRUE);
+		if (ret != 0) {
+			ret = -ENOMEM;
+			goto cleanup;
+		}
+	}
+
+	/* No items in chan_obj is not an error, there
+	 * is just nothing to report
+	 */
+	if (cJSON_GetArraySize(chan_obj) == 0) {
+		goto cleanup;
+	}
+
+	cJSON_AddItemToObject(config_obj, channel_type_str[CLOUD_CHANNEL_GPS],
+			      chan_obj);
+	cJSON_AddItemToObject(reported_obj, "config", config_obj);
+	cJSON_AddItemToObject(state_obj, "reported", reported_obj);
+	cJSON_AddItemToObject(root_obj, "state", state_obj);
+
+	buffer = cJSON_PrintUnformatted(root_obj);
+	cJSON_Delete(root_obj);
+	output->buf = buffer;
+	output->len = strlen(buffer);
+
+	return 0;
+
+cleanup:
+	output->buf = NULL;
+	output->len = 0;
+	cJSON_Delete(chan_obj);
+	cJSON_Delete(state_obj);
+	cJSON_Delete(reported_obj);
+	cJSON_Delete(config_obj);
+	cJSON_Delete(root_obj);
+
+	return ret;
+}
+
+int cloud_encode_device_status_data(
+	void *modem_param,
+	const char *const ui[], const u32_t ui_count,
+	const char *const fota[], const u32_t fota_count,
+	const u16_t fota_version,
+	struct cloud_msg *output)
+{
+	__ASSERT_NO_MSG((ui != NULL) || !ui_count);
+	__ASSERT_NO_MSG((fota != NULL) || !fota_count);
 	__ASSERT_NO_MSG(output != NULL);
 
 	cJSON *root_obj = cJSON_CreateObject();
 	cJSON *state_obj = cJSON_CreateObject();
 	cJSON *reported_obj = cJSON_CreateObject();
+	cJSON *device_obj = cJSON_CreateObject();
 	char dev_str[] = CLOUD_CHANNEL_STR_DEVICE_INFO;
 	const char *channel_type;
+	int ret = 0;
 
-	if (root_obj == NULL || state_obj == NULL || reported_obj == NULL) {
+	if (root_obj == NULL || state_obj == NULL ||
+	    reported_obj == NULL || device_obj == NULL) {
 		cJSON_Delete(root_obj);
 		cJSON_Delete(state_obj);
 		cJSON_Delete(reported_obj);
+		cJSON_Delete(device_obj);
 		return -ENOMEM;
 	}
 
@@ -367,36 +574,60 @@ int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
 	 * the size of the digital twin document if the "DEVICE" is not
 	 * deleted at the same time.
 	 */
-	if (channel->type == CLOUD_CHANNEL_DEVICE_INFO) {
-		cJSON *dummy_obj = cJSON_CreateNull();
-		if (dummy_obj == NULL) {
-			/* Dummy creation failed, but we'll let it do so
-			 * silently as it's not a functionally critical error.
-			 */
-		} else {
-			ret += json_add_obj(reported_obj, dev_str, dummy_obj);
-		}
+	cJSON *dummy_obj = cJSON_CreateNull();
 
-		/* Convert to lowercase for shadow */
-		for (int i = 0; dev_str[i]; ++i) {
-			dev_str[i] = tolower(dev_str[i]);
-		}
-		channel_type = dev_str;
+	if (dummy_obj == NULL) {
+		/* Dummy creation failed, but we'll let it do so
+		 * silently as it's not a functionally critical error.
+		 */
 	} else {
-		channel_type = channel_type_str[channel->type];
+		ret += json_add_obj(reported_obj, dev_str, dummy_obj);
 	}
 
-	ret += json_add_obj(reported_obj, channel_type,
-			   (cJSON *)channel->data.buf);
-	ret += json_add_obj(state_obj, "reported", reported_obj);
-	ret += json_add_obj(root_obj, "state", state_obj);
+	/* Convert to lowercase for shadow */
+	for (int i = 0; dev_str[i]; ++i) {
+		dev_str[i] = tolower(dev_str[i]);
+	}
+	channel_type = dev_str;
+
+	size_t item_cnt = 0;
+
+#ifdef CONFIG_MODEM_INFO
+	if (modem_param) {
+		int val;
+
+		val = modem_info_json_object_encode((struct modem_param_info *)
+			modem_param, device_obj);
+		if (val > 0) {
+			item_cnt = (size_t)val;
+		}
+	}
+#endif
+
+	if (service_info_json_object_encode(ui, ui_count,
+					    fota, fota_count,
+					    fota_version,
+					    device_obj) == 0) {
+		++item_cnt;
+	}
+
+	if (item_cnt != 0) {
+		ret += json_add_obj(reported_obj, channel_type, device_obj);
+		ret += json_add_obj(state_obj, "reported", reported_obj);
+		ret += json_add_obj(root_obj, "state", state_obj);
+	} else {
+		ret = -ECHILD;
+	}
 
 	if (ret != 0) {
 		cJSON_Delete(root_obj);
 		cJSON_Delete(state_obj);
 		cJSON_Delete(reported_obj);
+		cJSON_Delete(device_obj);
 		return -EAGAIN;
 	}
+
+	char *buffer;
 
 	buffer = cJSON_PrintUnformatted(root_obj);
 	cJSON_Delete(root_obj);
@@ -706,7 +937,7 @@ int cloud_decode_command(char const *input)
 
 	root_obj = cJSON_Parse(input);
 	if (root_obj == NULL) {
-		LOG_ERR("[%s:%d] Unable to parse input", __func__, __LINE__);
+		LOG_DBG("[%s:%d] Unable to parse input", __func__, __LINE__);
 		return -ENOENT;
 	}
 
@@ -721,123 +952,22 @@ int cloud_decode_command(char const *input)
 
 int cloud_decode_init(cloud_cmd_cb_t cb)
 {
+	cJSON_Init();
 	cloud_command_cb = cb;
-
+	for (int i = 0; i < ARRAY_SIZE(sensor_cfg); ++i) {
+		/* Enable values should be undefined by default */
+		sensor_cfg[i].cfg.value
+			[SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] =
+			CLOUD_CMD_STATE_UNDEFINED;
+		sensor_cfg[i].cfg.value
+			[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE] =
+			CLOUD_CMD_STATE_UNDEFINED;
+		sensor_cfg[i].cfg.value
+			[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE] =
+			CLOUD_CMD_STATE_UNDEFINED;
+	}
 	return 0;
 }
-
-int cloud_encode_env_sensors_data(const env_sensor_data_t *sensor_data,
-				  struct cloud_msg *output)
-{
-	__ASSERT_NO_MSG(sensor_data != NULL);
-	__ASSERT_NO_MSG(output != NULL);
-
-	char buf[6];
-	u8_t len;
-	struct cloud_channel_data cloud_sensor;
-
-	switch (sensor_data->type) {
-	case ENV_SENSOR_TEMPERATURE:
-		cloud_sensor.type = CLOUD_CHANNEL_TEMP;
-		break;
-
-	case ENV_SENSOR_HUMIDITY:
-		cloud_sensor.type = CLOUD_CHANNEL_HUMID;
-		break;
-
-	case ENV_SENSOR_AIR_PRESSURE:
-		cloud_sensor.type = CLOUD_CHANNEL_AIR_PRESS;
-		break;
-
-	case ENV_SENSOR_AIR_QUALITY:
-		cloud_sensor.type = CLOUD_CHANNEL_AIR_QUAL;
-		break;
-
-	default:
-		return -1;
-	}
-
-	len = snprintf(buf, sizeof(buf), "%.1f",
-		sensor_data->value);
-	cloud_sensor.data.buf = buf;
-	cloud_sensor.data.len = len;
-
-	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
-}
-
-int cloud_encode_motion_data(const motion_data_t *motion_data,
-				  struct cloud_msg *output)
-{
-	__ASSERT_NO_MSG(motion_data != NULL);
-	__ASSERT_NO_MSG(output != NULL);
-
-	struct cloud_channel_data cloud_sensor;
-
-	cloud_sensor.type = CLOUD_CHANNEL_FLIP;
-
-	switch (motion_data->orientation) {
-	case MOTION_ORIENTATION_NORMAL:
-		cloud_sensor.data.buf = "NORMAL";
-		break;
-	case MOTION_ORIENTATION_UPSIDE_DOWN:
-		cloud_sensor.data.buf = "UPSIDE_DOWN";
-		break;
-	default:
-		return -1;
-	}
-
-	cloud_sensor.data.len = sizeof(cloud_sensor.data.buf) - 1;
-
-	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
-
-}
-#if CONFIG_LIGHT_SENSOR
-/* 4 32-bit ints, 3 spaces, NULL */
-#define LIGHT_SENSOR_DATA_STRING_MAX_LEN ((4 * 11) + 3 + 1)
-#define LIGHT_SENSOR_DATA_NO_UPDATE (-1)
-int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
-				   struct cloud_msg *output)
-{
-	char buf[LIGHT_SENSOR_DATA_STRING_MAX_LEN];
-	u8_t len;
-	struct cloud_channel_data cloud_sensor;
-	struct light_sensor_data send = { .red = LIGHT_SENSOR_DATA_NO_UPDATE,
-					  .green = LIGHT_SENSOR_DATA_NO_UPDATE,
-					  .blue = LIGHT_SENSOR_DATA_NO_UPDATE,
-					  .ir = LIGHT_SENSOR_DATA_NO_UPDATE };
-
-	if ((sensor_data == NULL) || (output == NULL)) {
-		return -EINVAL;
-	}
-
-	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_RED, sensor_data->red)) {
-		send.red = sensor_data->red;
-	}
-
-	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_GREEN,
-				  sensor_data->green)) {
-		send.green = sensor_data->green;
-	}
-
-	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_BLUE,
-				  sensor_data->blue)) {
-		send.blue = sensor_data->blue;
-	}
-
-	if (cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_IR, sensor_data->ir)) {
-		send.ir = sensor_data->ir;
-	}
-
-	len = snprintf(buf, sizeof(buf), "%d %d %d %d", send.red, send.green,
-		       send.blue, send.ir);
-
-	cloud_sensor.data.buf = buf;
-	cloud_sensor.data.len = len;
-	cloud_sensor.type = CLOUD_CHANNEL_LIGHT_SENSOR;
-
-	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
-}
-#endif /* CONFIG_LIGHT_SENSOR */
 
 static int sensor_chan_cfg_set_item(struct sensor_chan_cfg *const cfg,
 				  const enum sensor_chan_cfg_item_type type,
@@ -856,25 +986,34 @@ static int sensor_chan_cfg_set_item(struct sensor_chan_cfg *const cfg,
 static bool sensor_chan_cfg_is_send_allowed(const struct sensor_chan_cfg *const cfg,
 										    const double sensor_value)
 {
+	/* By default, an undefined send enable state will
+	 * allow data to be sent
+	 */
 	if ((cfg == NULL) ||
-	    (!cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE])) {
+	    (cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] ==
+		 CLOUD_CMD_STATE_FALSE)) {
 		return false;
 	}
 
-	if (((cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE]) &&
+	if (((cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE] ==
+		CLOUD_CMD_STATE_TRUE) &&
 	     (sensor_value <
 	      cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_VALUE]))) {
 		return true;
 	}
 
-	if (((cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE]) &&
+	if (((cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE] ==
+		CLOUD_CMD_STATE_TRUE) &&
 	     (sensor_value >
 	      cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_VALUE]))) {
 		return true;
 	}
 
-	return (!cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE] &&
-		!cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE]);
+	/* Send data if both thresholds are not enabled */
+	return ((cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE]
+			!= CLOUD_CMD_STATE_TRUE) &&
+			cfg->value[SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE]
+			!= CLOUD_CMD_STATE_TRUE);
 }
 
 static int cloud_set_chan_cfg_item(const enum cloud_channel channel,
@@ -889,6 +1028,31 @@ static int cloud_set_chan_cfg_item(const enum cloud_channel channel,
 	}
 
 	return -ENOTSUP;
+}
+
+enum cloud_cmd_state cloud_get_channel_enable_state(
+			  const enum cloud_channel channel)
+{
+	for (int i = 0; i < ARRAY_SIZE(sensor_cfg); ++i) {
+		if (sensor_cfg[i].chan == channel) {
+			return sensor_cfg[i].cfg.value
+				   [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE];
+		}
+	}
+
+	return CLOUD_CMD_STATE_UNDEFINED;
+}
+
+void cloud_set_channel_enable_state(
+			  const enum cloud_channel channel,
+			  const enum cloud_cmd_state state)
+{
+	for (int i = 0; i < ARRAY_SIZE(sensor_cfg); ++i) {
+		if (sensor_cfg[i].chan == channel) {
+			sensor_cfg[i].cfg.value
+				[SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = state;
+		}
+	}
 }
 
 bool cloud_is_send_allowed(const enum cloud_channel channel, const double value)
@@ -916,7 +1080,7 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 		err = cloud_set_chan_cfg_item(
 			cmd->channel,
 			SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
-			(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
+			cmd->data.sv.state);
 		break;
 	case CLOUD_CMD_THRESHOLD_HIGH:
 		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {
@@ -933,7 +1097,7 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 			err = cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE,
-				(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
+				cmd->data.sv.state);
 		}
 		break;
 	case CLOUD_CMD_THRESHOLD_LOW:
@@ -945,13 +1109,13 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 			cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE,
-				true);
+				CLOUD_CMD_STATE_TRUE);
 
 		} else {
 			err = cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE,
-				(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
+				cmd->data.sv.state);
 		}
 		break;
 	default:

@@ -53,7 +53,7 @@ struct nfc_tnep_tag_service_cb {
  *
  * This structure contains all information about user service.
  * It contains service parameters, service parameters record
- * and services callbacks. It is used by @ref tnep_init function.
+ * and services callbacks. It is used by @em tnep_init() function.
  */
 struct nfc_tnep_tag_service {
 	/** Services parameters. */
@@ -98,9 +98,9 @@ struct nfc_tnep_tag_service {
  * @param[in] _deselect_cb Callback function, called by protocol library when
  *                         service is deselected by the Reader/Writer.
  * @param[in] _message_cb Callback function, called by protocol library when
- *                         new message is received from the Reader/Writer.
- * @parami[in] _error_cb Callback function, called by protocol library when
- *                       an internal error occurred.
+ *                        new message is received from the Reader/Writer.
+ * @param[in] _error_cb Callback function, called by protocol library when
+ *                      an internal error occurred.
  */
 #define NFC_TNEP_TAG_SERVICE_DEF(_name, _uri, _uri_length,                  \
 				 _mode, _t_wait, _n_wait,                   \
@@ -110,9 +110,9 @@ struct nfc_tnep_tag_service {
 				 _message_cb,                               \
 				 _error_cb)                                 \
 									    \
-	BUILD_ASSERT_MSG(_t_wait <= NFC_TNEP_TAG_MAX_WAIT_TIME,                                  \
+	BUILD_ASSERT(_t_wait <= NFC_TNEP_TAG_MAX_WAIT_TIME,                                  \
 			 "The Waiting time has to be equal or smaller than 63");                 \
-	BUILD_ASSERT_MSG(_n_wait <= NFC_TNEP_TAG_MAX_WAIT_TIME,                                  \
+	BUILD_ASSERT(_n_wait <= NFC_TNEP_TAG_MAX_WAIT_TIME,                                  \
 			 "The Waiting time extension count has to be equal or smaller then 15"); \
 												 \
 	NFC_TNEP_SERIVCE_PARAM_RECORD_DESC_DEF(_name, NFC_TNEP_VERSION,	\
@@ -159,9 +159,9 @@ int nfc_tnep_tag_tx_msg_buffer_register(u8_t *tx_buff,
  * @brief Start communication using TNEP.
  *
  * @param[out] events TNEP Tag Events.
- * @param[in] cnt Event count. This library needs 2 events.
- * @param[in,out] Pointer to NDEF message structure. It is used to
- *                create TNEP NDEF message.
+ * @param[in] event_cnt Event count. This library needs 2 events.
+ * @param[in,out] msg Pointer to NDEF message structure. It is used to
+ *                    create TNEP NDEF message.
  * @param[in] payload_set Function for setting NDEF data for NFC TNEP
  *                        Tag Device. This library use it internally
  *                        to set raw NDEF message to the Tag NDEF file.
@@ -202,7 +202,7 @@ int nfc_tnep_tag_initial_msg_create(const struct nfc_tnep_tag_service *svc,
  * This function must be called periodically from
  * thread to process the TNEP Tag Device.
  *
- * @note This function cannot be called before @ref nfc_tnep_init.
+ * @note This function cannot be called before @em nfc_tnep_init().
  */
 void nfc_tnep_tag_process(void);
 
@@ -228,7 +228,7 @@ void nfc_tnep_tag_rx_msg_indicate(const u8_t *rx_buffer, size_t len);
  * selection to set service application data and use it also
  * during service data exchange with the NFC Polling Device.
  * To indicate that application has no more data use
- * @nfc_tnep_tag_tx_msg_no_app_data.
+ * nfc_tnep_tag_tx_msg_no_app_data().
  *
  * @param[in] record Pointer to application data records.
  * @param[in] cnt Records count.

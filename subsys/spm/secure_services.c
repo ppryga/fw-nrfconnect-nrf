@@ -11,6 +11,7 @@
 #include <autoconf.h>
 #include <secure_services.h>
 #include <string.h>
+#include <bl_validation.h>
 
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
@@ -63,6 +64,7 @@ struct read_range {
 	size_t size;
 };
 
+
 __TZ_NONSECURE_ENTRY_FUNC
 int spm_request_read(void *destination, u32_t addr, size_t len)
 {
@@ -96,6 +98,7 @@ int spm_request_read(void *destination, u32_t addr, size_t len)
 }
 #endif /* CONFIG_SPM_SERVICE_READ */
 
+
 #ifdef CONFIG_SPM_SERVICE_REBOOT
 __TZ_NONSECURE_ENTRY_FUNC
 void spm_request_system_reboot(void)
@@ -120,6 +123,7 @@ int spm_request_random_number(u8_t *output, size_t len, size_t *olen)
 }
 #endif /* CONFIG_SPM_SERVICE_RNG */
 
+
 #ifdef CONFIG_SPM_SERVICE_FIND_FIRMWARE_INFO
 __TZ_NONSECURE_ENTRY_FUNC
 int spm_firmware_info(u32_t fw_address, struct fw_info *info)
@@ -139,4 +143,17 @@ int spm_firmware_info(u32_t fw_address, struct fw_info *info)
 
 	return -EFAULT;
 }
-#endif
+#endif /* CONFIG_SPM_SERVICE_FIND_FIRMWARE_INFO */
+
+
+#ifdef CONFIG_SPM_SERVICE_PREVALIDATE
+__TZ_NONSECURE_ENTRY_FUNC
+int spm_prevalidate_b1_upgrade(u32_t dst_addr, u32_t src_addr)
+{
+	if (!bl_validate_firmware_available()) {
+		return -ENOTSUP;
+	}
+	bool result = bl_validate_firmware(dst_addr, src_addr);
+	return result;
+}
+#endif /* CONFIG_SPM_SERVICE_PREVALIDATE */

@@ -52,7 +52,7 @@ config SPM_SERVICE_RNG
 	bool "Request random numbers"
 	default y
 	select NORDIC_SECURITY_BACKEND
-	select FLOAT
+	select FPU
 
 # NORDIC_SECURITY_BACKEND is not supported on 53 yet
 	depends on ! SOC_NRF5340_CPUAPP
@@ -86,6 +86,18 @@ config SPM_SERVICE_FIND_FIRMWARE_INFO
 	  The Non-Secure Firmware is not allowed to read the memory
 	  marked as secure. This service allows it to request firmware info
 	  about image stored at a given address.
+
+config SPM_SERVICE_PREVALIDATE
+	bool "Prevalidate B1 upgrades (Requires Immutable Bootloader)"
+	default n
+	select SECURE_BOOT_CRYPTO
+	select SECURE_BOOT_VALIDATION
+	select BL_VALIDATE_FW_EXT_API_ATLEAST_OPTIONAL
+	help
+	  The B0 bootloader allows calls into it for prevalidating upgrades of
+	  the stage it verifies. The B0 bootloader is in secure memory, so this
+	  secure service is needed for the app to access the prevalidation
+	  function.
 
 endif # SPM_SECURE_SERVICES
 
@@ -198,7 +210,7 @@ config SPM_NRF_REGULATORS_NS
 
 config SPM_NRF_WDT_NS
 	bool "WDT is Non-Secure"
-	default n
+	default y
 endmenu
 
 config SPM_NRF_DPPIC_NS

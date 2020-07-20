@@ -13,7 +13,7 @@ All files that your application uses must be specified in the :file:`CMakeList.t
 By default, most samples include only the main application file :file:`src/main.c`.
 This means that you must add all other files that you are using.
 
-You can also configure compiler options, application defines, or include directories in :file:`CMakeList.txt`.
+You can also configure compiler options, application defines, or include directories, or set :ref:`build types <gs_modifying_build_types>` in :file:`CMakeList.txt`.
 
 To update the :file:`CMakeList.txt` file, either edit it directly or use |SES| (SES) to maintain it.
 
@@ -69,10 +69,10 @@ Therefore, they must be surrounded by ``# NORDIC SDK APP START`` and ``# NORDIC 
 
 The following CMake commands can be managed by SES, if they target the ``app`` library:
 
-    - ``target_sources``
-    - ``target_compile_definitions``
-    - ``target_include_directories``
-    - ``target_compile_options``
+* ``target_sources``
+* ``target_compile_definitions``
+* ``target_include_directories``
+* ``target_compile_options``
 
 The :file:`CMakeLists.txt` files for the sample applications in the |NCS| are tagged as required.
 Therefore, if you always use SES to maintain them, you do not need to worry about tagging.
@@ -82,6 +82,7 @@ Typically, the :file:`CMakeLists.txt` files include at least the :file:`main.c` 
    target_sources(app PRIVATE src/main.c)
    # NORDIC SDK APP END
 
+.. _configure_application:
 
 Configuring your application
 ****************************
@@ -93,7 +94,7 @@ The default configuration for a library is specified in its :file:`Kconfig` file
 Similarly, the default configuration for a board is specified in its :file:`*_defconfig` file (and its :file:`Kconfig.defconfig` file, see :ref:`zephyr:default_board_configuration` in the Zephyr documentation for more information).
 The configuration for your application, which might override some default options of the libraries or the board, is specified in a :file:`prj.conf` file in the application directory.
 
-For detailed information about configuration options, see :ref:`zephyr:application_kconfig` in the Zephyr documentation.
+For detailed information about configuration options, see :ref:`zephyr:application-kconfig` in the Zephyr documentation.
 
 
 Changing the configuration permanently
@@ -102,7 +103,7 @@ Changing the configuration permanently
 To configure your application and maintain the configuration when you clean the build directory, add your changes to the :file:`prj.conf` file in your application directory.
 In this file, you can specify different values for configuration options that are defined by a library or board, and you can add configuration options that are specific to your application.
 
-See :ref:`zephyr:application_set_conf` in the Zephyr documentation for information on how to edit the :file:`prj.conf` file.
+See :ref:`zephyr:setting_configuration_values` in the Zephyr documentation for information on how to edit the :file:`prj.conf` file.
 
 If you work with SES, the :file:`prj.conf` file is read when you open a project.
 This means that after you edit this file, you must re-open your project.
@@ -130,7 +131,7 @@ If your application contains more than one image (see :ref:`ug_multi_image`), yo
 To configure the parent image (the main application), select :guilabel:`menuconfig`.
 The other options allow you to configure the child images.
 
-See :ref:`zephyr:override_kernel_conf` in the Zephyr documentation for instructions on how to run menuconfig or guiconfig.
+See :ref:`zephyr:menuconfig` in the Zephyr documentation for instructions on how to run menuconfig or guiconfig.
 
 To locate a specific configuration option, use the filter (:guilabel:`Jump to` in menuconfig and guiconfig).
 The documentation for each :ref:`configuration option <configuration_options>` also lists the menu path where the option can be found.
@@ -153,3 +154,76 @@ To specify CMake options, click :guilabel:`Tools` > :guilabel:`Options`, select 
 If you work on the command line, pass the additional options to the ``west build`` command.
 The options must be added after a ``--`` at the end of the command.
 See :ref:`zephyr:west-building-cmake-args` for more information.
+
+.. _gs_modifying_build_types:
+
+Configuring build types
+***********************
+
+.. build_types_overview_start
+
+Build types enable you to use different sets of configuration options for each board.
+You can create several build type ``.conf`` files per board and select one of them when building the application.
+This means that you do not have to use one :file:`prj.conf` file for your project and modify it each time to fit your needs.
+
+.. build_types_overview_end
+
+.. note::
+    Creating build types and selecting them is optional.
+    This is a feature specific to the :ref:`application development in |NCS| <ncs-app-dev>`.
+
+.. _gs_modifying_build_types_creating:
+
+Creating build type files
+=========================
+
+To create custom build type files for your application instead of using a single :file:`prj.conf` file, complete the following steps:
+
+1. During :ref:`application development <zephyr:application>`, follow the procedure for creating the application until after the step where you create the :file:`CMakeLists.txt` file.
+#. In the :file:`CMakeLists.txt` file, define the file name pattern for configuration files.
+   For example::
+
+    set(CONF_FILE "app_${CMAKE_BUILD_TYPE}.conf")
+
+   In this define, ``CMAKE_BUILD_TYPE`` will be used for selecting the build type.
+#. Optionally, include an if statement that checks for the presence of the selected build type configuration files.
+   For an example, see :file:`applications/nrf_desktop/CMakeLists.txt`.
+#. Continue the application creation procedure by setting the Kconfig configuration options.
+#. Save the :file:`.conf` file in the application directory with a name that matches the file name pattern defined in CMakeLists.
+   For example, :file:`app_ZRelease.conf`.
+   In this file name, ``ZRelease`` is the build type name.
+
+You can now select build types in SES or from command line.
+
+Selecting a build type in SES
+=============================
+
+.. build_types_selection_ses_start
+
+To select the build type in SEGGER Embedded Studio:
+
+1. Go to :guilabel:`Tools` -> :guilabel:`Options...` -> :guilabel:`nRF Connect`.
+#. Set ``Additional CMake Options`` to ``-DCMAKE_BUILD_TYPE=selected_build_type``.
+   For example, for ``ZRelease`` set the following value: ``-DCMAKE_BUILD_TYPE=ZRelease``.
+#. Reload the project.
+
+The changes will be applied after reloading.
+
+.. build_types_selection_ses_end
+
+Selecting a build type from command line
+========================================
+
+.. build_types_selection_cmd_start
+
+To select the build type when building the application from command line, specify the build type by adding the ``-- -DCMAKE_BUILD_TYPE=selected_build_type`` to the ``west build`` command.
+
+For example, you can build the ``ZRelease`` firmware for the PCA20041 board by running the following command in the project directory:
+
+.. code-block:: console
+
+   west build -b nrf52840_pca20041 -d build_pca20041 -- -DCMAKE_BUILD_TYPE=ZRelease
+
+The ``build_pca20041`` parameter specifies the output directory for the build files.
+
+.. build_types_selection_cmd_end

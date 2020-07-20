@@ -4,37 +4,27 @@
 
 '''The "ncs-xyz" extension commands.'''
 
+import argparse
 from pathlib import PurePath
 import subprocess
 from textwrap import dedent
 
-import packaging.version
 from west import log
 from west.commands import WestCommand
-from west.manifest import Manifest, MalformedManifest
-from west.version import __version__ as west_ver
+from west.manifest import Manifest, MalformedManifest, ImportFlag, \
+    MANIFEST_PROJECT_INDEX
 import yaml
 
 import ncs_west_helpers as nwh
 
 def add_zephyr_rev_arg(parser):
-    parser.add_argument('-z', '--zephyr-rev',
-                        help='''upstream git ref to use for zephyr project;
-                        default is upstream/master''')
+    parser.add_argument('-z', '--zephyr-rev', metavar='REF',
+                        help='''zephyr git ref (commit, branch, etc.);
+                        default: upstream/master''')
 
 def add_projects_arg(parser):
     parser.add_argument('projects', metavar='PROJECT', nargs='*',
-                        help='''projects (by name or path) to operate on;
-                        defaults to all projects in the manifest which
-                        are shared with the upstream manifest''')
-
-def check_west_version():
-    min_ver = '0.6.99'
-    if (packaging.version.parse(west_ver) <
-            packaging.version.parse(min_ver)):
-        log.die('this command currently requires a pre-release west '
-                f'(your west version is {west_ver}, '
-                f'but must be at least {min_ver}')
+                        help='projects (by name or path) to operate on')
 
 def likely_merged(np, zp, nsha, zsha):
     analyzer = nwh.RepoAnalyzer(np, zp, nsha, zsha)
@@ -45,12 +35,17 @@ def likely_merged(np, zp, nsha, zsha):
         log.msg('downstream patches which are likely merged upstream',
                 '(revert these if appropriate):', color=log.WRN_COLOR)
         for dc, ucs in likely_merged.items():
-            log.inf(f'- {dc.oid} ({nwh.commit_shortlog(dc)})\n'
-                    '  Similar upstream commits:')
-            for uc in ucs:
-                log.inf(f'  {uc.oid} ({nwh.commit_shortlog(uc)})')
+            if len(ucs) == 1:
+                log.inf(f'- {dc.oid} {nwh.commit_shortlog(dc)}')
+                log.inf(f'  Similar upstream shortlog:\n'
+                        f'  {ucs[0].oid} {nwh.commit_shortlog(ucs[0])}')
+            else:
+                log.inf(f'- {dc.oid} {nwh.commit_shortlog(dc)}\n'
+                        '  Similar upstream shortlogs:')
+                for i, uc in enumerate(ucs, start=1):
+                    log.inf(f'    {i}. {uc.oid} {nwh.commit_shortlog(uc)}')
     else:
-        log.inf('no downstream patches seem to have been merged upstream')
+        log.dbg('no downstream patches seem to have been merged upstream')
 
 def to_ncs_name(zp):
     # convert zp, a west.manifest.Project in the zephyr manifest,
@@ -77,7 +72,7 @@ class NcsWestCommand(WestCommand):
             sha = project.sha(revision)
             project.git('cat-file -e ' + sha)
             return sha
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             return None
 
     def setup_upstream_downstream(self, args):
@@ -131,13 +126,6 @@ class NcsWestCommand(WestCommand):
                            capture_stdout=True, check=True)
         z_west_yml = cp.stdout.decode('utf-8')
         try:
-            # The topdir kwarg was added in a pre-release west, which
-            # is required to use this file. The latest stable (0.6.3)
-            # doesn't have it, so pylint is failing with a false error
-            # report here. Turn it off for now; this can be removed
-            # when west 0.7 is out.
-            #
-            # pylint: disable=unexpected-keyword-arg
             return Manifest.from_data(source_data=yaml.safe_load(z_west_yml),
                                       topdir=self.topdir)
         except MalformedManifest:
@@ -176,21 +164,22 @@ class NcsLoot(NcsWestCommand):
             Downstream revisions are loaded from nrf/west.yml.'''))
 
     def do_add_parser(self, parser_adder):
-        parser = parser_adder.add_parser(self.name, help=self.help,
-                                         description=self.description)
+        parser = parser_adder.add_parser(
+            self.name, help=self.help,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=self.description)
         add_zephyr_rev_arg(parser)
         parser.add_argument('-s', '--sha', dest='sha_only',
                             action='store_true',
                             help='only print SHAs of OOT commits')
-        parser.add_argument('-f', '--file', dest='files', action='append',
-                            help='''restrict output to patches touching
-                            this file; may be given multiple times. If used,
-                            a single project must be given''')
+        parser.add_argument('-f', '--file', dest='files', metavar='FILE',
+                            action='append',
+                            help='''list patches changing this file;
+                            may be given multiple times''')
         add_projects_arg(parser)
         return parser
 
     def do_run(self, args, unknown_args):
-        check_west_version()
         if args.files and len(args.projects) != 1:
             self.parser.error('--file used, so expected 1 project argument, '
                               f'but got: {len(args.projects)}')
@@ -214,52 +203,63 @@ class NcsLoot(NcsWestCommand):
         # name: project name
         # project: the west.manifest.Project instance in the NCS manifest
         # z_project: the Project instance in the upstream manifest
-        msg = f'{_name_and_path(project)} outstanding downstream patches:'
+        # args: parsed arguments from argparse
+        name_path = _name_and_path(project)
 
         # Get the upstream revision of the project. The zephyr project
         # has to be treated as a special case.
         if name == 'zephyr':
             z_rev = self.zephyr_rev
-            msg += f' NOTE: {z_rev} *must* be up to date'
         else:
             z_rev = z_project.revision
 
-        log.banner(msg)
+        n_rev = 'refs/heads/manifest-rev'
 
         try:
-            nsha = project.sha(project.revision)
+            nsha = project.sha(n_rev)
             project.git('cat-file -e ' + nsha)
         except subprocess.CalledProcessError:
-            log.wrn(f"can't get loot; please run "
-                    f'"west update {project.name}" '
-                    f'(need revision {project.revision})')
-            return
-        try:
-            zsha = z_project.sha(z_project.revision)
-            z_project.git('cat-file -e ' + zsha)
-        except subprocess.CalledProcessError:
-            log.wrn("can't get loot; please fetch upstream URL "
-                    f'{z_project.url} '
-                    f'(need revision {z_project.revision})')
+            log.wrn(f"{name_path}: can't get loot; please run "
+                    f'"west update" (no "{n_rev}" ref)')
             return
 
         try:
-            analyzer = nwh.RepoAnalyzer(project, z_project,
-                                        project.revision, z_rev)
-        except nwh.InvalidRepositoryError as ire:
-            log.die(str(ire))
+            zsha = z_project.sha(z_rev)
+            z_project.git('cat-file -e ' + zsha)
+        except subprocess.CalledProcessError:
+            log.wrn(f"{name_path}: can't get loot; please fetch upstream URL "
+                    f'{z_project.url} (need revision {z_project.revision})')
+            return
+
         try:
-            for c in analyzer.downstream_outstanding:
-                if args.files and not nwh.commit_affects_files(c, args.files):
-                    log.dbg(f"skipping {c.oid}; it doesn't affect file filter",
-                            level=log.VERBOSE_VERY)
-                    continue
-                if args.sha_only:
-                    log.inf(str(c.oid))
-                else:
-                    log.inf(f'- {c.oid} {nwh.commit_shortlog(c)}')
+            analyzer = nwh.RepoAnalyzer(project, z_project, n_rev, z_rev)
+        except nwh.InvalidRepositoryError as ire:
+            log.die(f"{name_path}: {str(ire)}")
+
+        try:
+            loot = analyzer.downstream_outstanding
         except nwh.UnknownCommitsError as uce:
-            log.die('unknown commits:', str(uce))
+            log.die(f'{name_path}: unknown commits: {str(uce)}')
+
+        if not loot and log.VERBOSE <= log.VERBOSE_NONE:
+            # Don't print output if there's no loot unless verbose
+            # mode is on.
+            return
+
+        log.banner(name_path)
+        log.inf(f'NCS commit (manifest-rev): {nsha}, upstream commit: {zsha}')
+        log.inf('OOT patches: ' +
+                (f'{len(loot)} total' if loot else 'none') +
+                (', output limited by --file' if args.files else ''))
+        for c in loot:
+            if args.files and not nwh.commit_affects_files(c, args.files):
+                log.dbg(f"skipping {c.oid}; it doesn't affect file filter",
+                        level=log.VERBOSE_VERY)
+                continue
+            if args.sha_only:
+                log.inf(str(c.oid))
+            else:
+                log.inf(f'- {c.oid} {nwh.commit_shortlog(c)}')
 
 class NcsCompare(NcsWestCommand):
     def __init__(self):
@@ -267,28 +267,38 @@ class NcsCompare(NcsWestCommand):
             'ncs-compare',
             'compare upstream manifest with NCS',
             dedent('''
-            Compares project status in upstream and NCS manifests.
-
-            Run this after doing a zephyr mergeup to double-check the
-            results. This command works using the current contents of
-            zephyr/west.yml, so the mergeup must be complete for output
-            to be valid.
+            Compares project status between zephyr/west.yml and your
+            current NCS west manifest-rev branches (i.e. the results of your
+            most recent 'west update').
 
             Use --verbose to include information on blacklisted
             upstream projects.'''))
 
     def do_add_parser(self, parser_adder):
-        parser = parser_adder.add_parser(self.name, help=self.help,
-                                         description=self.description)
+        parser = parser_adder.add_parser(
+            self.name, help=self.help,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=self.description)
         add_zephyr_rev_arg(parser)
         return parser
 
     def do_run(self, args, unknown_args):
-        check_west_version()
         self.setup_upstream_downstream(args)
 
-        log.inf('Comparing nrf/west.yml with zephyr/west.yml at revision '
-                f'{self.zephyr_rev}' +
+        # Get a dict containing projects that are in the NCS which are
+        # *not* imported from Zephyr in nrf/west.yml. We will treat
+        # these specially to make the output easier to understand.
+        ignored_imports = Manifest.from_file(
+            import_flags=ImportFlag.IGNORE_PROJECTS)
+        in_nrf = set(p.name for p in
+                     ignored_imports.projects[MANIFEST_PROJECT_INDEX + 1:])
+        # This is a dict mapping names of projects which *are* imported
+        # from zephyr to the Project instances.
+        self.imported_pmap = {name: project for name, project in
+                              self.ncs_pmap.items() if name not in in_nrf}
+
+        log.inf('Comparing your manifest-rev branches with zephyr/west.yml '
+                f'at {self.zephyr_rev}' +
                 (', sha: ' + self.zephyr_sha
                  if self.zephyr_rev != self.zephyr_sha else ''))
         log.inf()
@@ -314,24 +324,32 @@ class NcsCompare(NcsWestCommand):
 
         def print_lst(projects):
             for p in projects:
-                log.small_banner(f'{_name_and_path(p)}')
+                log.inf(f'{_name_and_path(p)}')
 
         if missing_blacklisted and log.VERBOSE >= log.VERBOSE_NORMAL:
             log.banner('blacklisted zephyr projects',
                        'not in nrf (these are all OK):')
             print_lst(missing_blacklisted)
 
-        log.banner('blacklisted zephyr projects in nrf:')
+        log.banner('blacklisted zephyr projects in NCS:')
         if present_blacklisted:
-            log.wrn('these should all be removed from nrf')
+            log.wrn(f'these should all be removed from {self.manifest.path}!')
             print_lst(present_blacklisted)
         else:
             log.inf('none (OK)')
 
-        log.banner('non-blacklisted zephyr projects',
-                   'missing from nrf:')
+        log.banner('non-blacklisted zephyr projects missing from NCS:')
         if missing_allowed:
-            log.wrn('these should be blacklisted or added to nrf')
+            west_yml = self.manifest.path
+            log.wrn(
+                f'missing projects should be added to NCS or blacklisted\n'
+                f"  To add to NCS:\n"
+                f"    1. do the zephyr mergeup\n"
+                f"    2. update zephyr revision in {west_yml}\n"
+                f"    3. add projects to zephyr's name_whitelist in "
+                f"{west_yml}\n"
+                f"    4. run west {self.name} again to check your work\n"
+                f"  To blacklist: edit _PROJECT_BLACKLIST in {__file__}")
             for p in missing_allowed:
                 log.small_banner(f'{_name_and_path(p)}:')
                 log.inf(f'upstream revision: {p.revision}')
@@ -340,7 +358,7 @@ class NcsCompare(NcsWestCommand):
             log.inf('none (OK)')
 
         if present_allowed:
-            log.banner('projects in both zephyr and nrf:')
+            log.banner('projects in both zephyr and NCS:')
             for zp in present_allowed:
                 # Do some extra checking on unmerged commits.
                 self.allowed_project(zp)
@@ -352,13 +370,17 @@ class NcsCompare(NcsWestCommand):
     def allowed_project(self, zp):
         nn = to_ncs_name(zp)
         np = self.ncs_pmap[nn]
-        banner = f'{nn} ({zp.path}):'
+        # is_imported is true if we imported this project from the
+        # zephyr manifest rather than defining it directly ourselves
+        # in nrf/west.yml.
+        is_imported = nn in self.imported_pmap
+        imported = ', imported from zephyr' if is_imported else ''
+        banner = f'{nn} ({zp.path}){imported}:'
 
+        nrev = 'refs/heads/manifest-rev'
         if np.name == 'zephyr':
-            nrev = self.manifest.get_projects(['zephyr'])[0].revision
             zrev = self.zephyr_sha
         else:
-            nrev = np.revision
             zrev = zp.revision
 
         nsha = self.checked_sha(np, nrev)
@@ -383,36 +405,28 @@ class NcsCompare(NcsWestCommand):
         if zsha == nsha:
             status = 'up to date'
         elif ahead and not behind:
-            status = f'ahead by {ahead} commits'
+            status = f'ahead by {ahead} commit' + ("s" if ahead > 1 else "")
         elif np.is_ancestor_of(nsha, zsha):
-            status = (f'behind by {behind} commits, '
-                      f'can be fast-forwarded to {zsha}')
+            status = f'behind by {behind} commit' + ("s" if behind > 1 else "")
         else:
-            status = f'diverged from upstream: {ahead} ahead, {behind} behind'
+            status = f'diverged: {ahead} ahead, {behind} behind'
 
-        upstream_rev = f'upstream revision: {zrev}'
-        if zrev != zsha:
-            upstream_rev += f' ({zsha})'
-
-        downstream_rev = 'NCS revision: ' + nrev
-        if nrev != nsha:
-            downstream_rev += f' ({nsha})'
-
+        commits = f'NCS commit: {nsha}, upstream commit: {zsha}'
         if 'up to date' in status or 'ahead by' in status:
             if log.VERBOSE > log.VERBOSE_NONE:
                 # Up to date or ahead: only print in verbose mode.
                 log.small_banner(banner)
-                status += ', ' + downstream_rev
-                if 'ahead by' in status:
-                    status += ', ' + upstream_rev
+                log.inf(commits)
                 log.inf(status)
                 likely_merged(np, zp, nsha, zsha)
         else:
             # Behind or diverged: always print.
+            if is_imported and 'behind by' in status:
+                status += ' and imported: update by doing zephyr mergeup'
+
             log.small_banner(banner)
+            log.inf(commits)
             log.msg(status, color=log.WRN_COLOR)
-            log.inf(upstream_rev)
-            log.inf(downstream_rev)
             likely_merged(np, zp, nsha, zsha)
 
 def _name_and_path(project):
@@ -435,4 +449,9 @@ _PROJECT_BLACKLIST = set(
      'modules/hal/silabs',
      'modules/hal/stm32',
      'modules/hal/ti',
-     'modules/hal/nxp'])
+     'modules/hal/nxp',
+     'modules/hal/xtensa',
+     'modules/hal/altera',
+     'modules/hal/infineon',
+     'modules/tee/tfm',
+     ])

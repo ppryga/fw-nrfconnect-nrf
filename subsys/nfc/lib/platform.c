@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
 #include <drivers/clock_control.h>
+#include <drivers/clock_control/nrf_clock_control.h>
 #include <nrfx_nfct.h>
 #include <nrfx_timer.h>
 
@@ -18,9 +19,12 @@ LOG_MODULE_REGISTER(nfc_platform, CONFIG_NFC_PLATFORM_LOG_LEVEL);
 					      NRFX_NFCT_CONFIG_TIMER_INSTANCE_ID, \
 					      _irq_handler)
 
+#define DT_DRV_COMPAT nordic_nrf_clock
+
 static struct device *clock;
 
-static void clock_handler(struct device *dev, void *user_data)
+static void clock_handler(struct device *dev, clock_control_subsys_t subsys,
+			  void *user_data)
 {
 	/* Activate NFCT only when HFXO is running */
 	nrfx_nfct_state_force(NRFX_NFCT_STATE_ACTIVATED);
@@ -34,7 +38,7 @@ static struct clock_control_async_data clock_ctrl = {
 
 nrfx_err_t nfc_platform_setup(void)
 {
-	clock = device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_16M");
+	clock = device_get_binding(DT_INST_LABEL(0));
 	__ASSERT_NO_MSG(clock);
 
 	IRQ_CONNECT(NFCT_IRQn, CONFIG_NFCT_IRQ_PRIORITY,
@@ -55,7 +59,8 @@ void nfc_platform_event_handler(nrfx_nfct_evt_t const *event)
 	case NRFX_NFCT_EVT_FIELD_DETECTED:
 		LOG_DBG("Field detected");
 
-		err = clock_control_async_on(clock, NULL, &clock_ctrl);
+		err = clock_control_async_on(clock, CLOCK_CONTROL_NRF_SUBSYS_HF,
+					     &clock_ctrl);
 		__ASSERT_NO_MSG(!err);
 
 		break;
@@ -63,7 +68,7 @@ void nfc_platform_event_handler(nrfx_nfct_evt_t const *event)
 	case NRFX_NFCT_EVT_FIELD_LOST:
 		LOG_DBG("Field lost");
 
-		err = clock_control_off(clock, NULL);
+		err = clock_control_off(clock, CLOCK_CONTROL_NRF_SUBSYS_HF);
 		__ASSERT_NO_MSG(!err);
 
 		break;

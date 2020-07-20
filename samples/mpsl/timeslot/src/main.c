@@ -5,7 +5,7 @@
  */
 
 #include <kernel.h>
-#include <console.h>
+#include <console/console.h>
 #include <string.h>
 #include <sys/printk.h>
 #include <zephyr/types.h>
@@ -60,13 +60,16 @@ static void error(void)
 	printk("ERROR!\n");
 	while (true) {
 		/* Spin for ever */
-		k_sleep(1000);
+		k_sleep(K_MSEC(1000));
 	}
 }
 
 static mpsl_timeslot_signal_return_param_t *mpsl_timeslot_callback(
+	mpsl_timeslot_session_id_t session_id,
 	uint32_t signal_type)
 {
+	(void) session_id; /* unused parameter */
+
 	mpsl_timeslot_signal_return_param_t *p_ret_val = NULL;
 
 	switch (signal_type) {
@@ -160,25 +163,30 @@ static void mpsl_nonpreemptible_thread(void)
 	int err;
 	enum mpsl_timeslot_call api_call = 0;
 
+	/* Initialize to invalid session id */
+	mpsl_timeslot_session_id_t session_id = 0xFFu;
+
 	while (1) {
 		if (k_msgq_get(&mpsl_api_msgq, &api_call, K_FOREVER) == 0) {
 			switch (api_call) {
 			case OPEN_SESSION:
 				err = mpsl_timeslot_session_open(
-					mpsl_timeslot_callback);
+					mpsl_timeslot_callback,
+					&session_id);
 				if (err) {
 					error();
 				}
 				break;
 			case MAKE_REQUEST:
 				err = mpsl_timeslot_request(
+					session_id,
 					&timeslot_request_earliest);
 				if (err) {
 					error();
 				}
 				break;
 			case CLOSE_SESSION:
-				err = mpsl_timeslot_session_close();
+				err = mpsl_timeslot_session_close(session_id);
 				if (err) {
 					error();
 				}
@@ -218,6 +226,7 @@ static void console_print_thread(void)
 
 void main(void)
 {
+
 	int err = console_init();
 
 	if (err) {
@@ -229,13 +238,13 @@ void main(void)
 
 	while (1) {
 		mpsl_timeslot_demo();
-		k_sleep(1000);
+		k_sleep(K_MSEC(1000));
 	}
 }
 
 K_THREAD_DEFINE(console_print_thread_id, STACKSIZE, console_print_thread,
-		NULL, NULL, NULL, THREAD_PRIORITY, 0, K_NO_WAIT);
+		NULL, NULL, NULL, THREAD_PRIORITY, 0, 0);
 
 K_THREAD_DEFINE(mpsl_nonpreemptible_thread_id, STACKSIZE,
 		mpsl_nonpreemptible_thread, NULL, NULL, NULL,
-		K_PRIO_COOP(MPSL_THREAD_PRIO), 0, K_NO_WAIT);
+		K_PRIO_COOP(MPSL_THREAD_PRIO), 0, 0);

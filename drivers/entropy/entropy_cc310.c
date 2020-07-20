@@ -13,8 +13,6 @@
 #include <zephyr.h>
 #include <drivers/entropy.h>
 
-#if CONFIG_ENTROPY_CC310
-
 #if defined(CONFIG_SPM)
 #include "secure_services.h"
 #else
@@ -64,11 +62,26 @@ static const struct entropy_driver_api entropy_cc310_rng_api = {
 	.get_entropy = entropy_cc310_rng_get_entropy
 };
 
-DEVICE_AND_API_INIT(entropy_cc310_rng, CONFIG_ENTROPY_NAME,
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(cryptocell), okay)
+#define DEVICE_NAME DT_LABEL(DT_NODELABEL(cryptocell))
+#elif DT_NODE_HAS_STATUS(DT_NODELABEL(cryptocell_sw), okay)
+#define DEVICE_NAME DT_LABEL(DT_NODELABEL(cryptocell_sw))
+#else
+/*
+ * TODO is there a better way to handle this?
+ *
+ * The problem is that when this driver is configured for use by
+ * non-secure applications, calling through SPM leaves our application
+ * devicetree without an actual cryptocell node, so we fall back on
+ * cryptocell_sw. This works, but it's a bit hacky and requires an out
+ * of tree zephyr patch.
+ */
+#error "No cryptocell or cryptocell_sw node labels in the devicetree"
+#endif
+
+DEVICE_AND_API_INIT(entropy_cc310_rng, DEVICE_NAME,
 		    &entropy_cc310_rng_init,
 		    NULL,
 		    NULL,
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &entropy_cc310_rng_api);
-
-#endif /* CONFIG_ENTROPY_CC310 */

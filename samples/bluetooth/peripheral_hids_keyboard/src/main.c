@@ -11,7 +11,7 @@
 #include <sys/printk.h>
 #include <sys/byteorder.h>
 #include <zephyr.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <soc.h>
 #include <assert.h>
 #include <spinlock.h>
@@ -175,7 +175,8 @@ static void advertising_start(void)
 						BT_LE_ADV_OPT_CONNECTABLE |
 						BT_LE_ADV_OPT_ONE_TIME,
 						BT_GAP_ADV_FAST_INT_MIN_2,
-						BT_GAP_ADV_FAST_INT_MAX_2);
+						BT_GAP_ADV_FAST_INT_MAX_2,
+						NULL);
 
 	err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd,
 			      ARRAY_SIZE(sd));
@@ -962,7 +963,7 @@ void main(void)
 		} else {
 			dk_set_led_off(ADV_STATUS_LED);
 		}
-		k_sleep(ADV_LED_BLINK_INTERVAL);
+		k_sleep(K_MSEC(ADV_LED_BLINK_INTERVAL));
 		/* Battery level simulation */
 		bas_notify();
 	}

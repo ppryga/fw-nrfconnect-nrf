@@ -6,6 +6,7 @@
 
 #include <zephyr/types.h>
 #include <sys/byteorder.h>
+#include <sys/util.h>
 
 #include <usb/usb_device.h>
 #include <usb/usb_common.h>
@@ -29,10 +30,15 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_USB_STATE_LOG_LEVEL);
 #define REPORT_TYPE_OUTPUT	0x02
 #define REPORT_TYPE_FEATURE	0x03
 
+
+#ifndef CONFIG_USB_HID_PROTOCOL_CODE
+#define CONFIG_USB_HID_PROTOCOL_CODE -1
+#endif
+
 static enum usb_state state;
 static u8_t hid_protocol = HID_PROTOCOL_REPORT;
 static struct device *usb_dev;
-static enum in_report sent_report_type = IN_REPORT_COUNT;
+static u8_t sent_report_id = REPORT_ID_COUNT;
 
 static struct config_channel_state cfg_chan;
 
@@ -135,15 +141,17 @@ static int set_report(struct usb_setup_packet *setup, s32_t *len, u8_t **data)
 
 static void report_sent(bool error)
 {
+	__ASSERT_NO_MSG(sent_report_id != REPORT_ID_COUNT);
+
 	struct hid_report_sent_event *event = new_hid_report_sent_event();
 
-	event->report_type = sent_report_type;
+	event->report_id = sent_report_id;
 	event->subscriber = &state;
 	event->error = error;
 	EVENT_SUBMIT(event);
 
 	/* Used to assert if previous report was sent before sending new one. */
-	sent_report_type = IN_REPORT_COUNT;
+	sent_report_id = REPORT_ID_COUNT;
 }
 
 static void report_sent_cb(void)
@@ -151,7 +159,7 @@ static void report_sent_cb(void)
 	report_sent(false);
 }
 
-static void send_mouse_report(const struct hid_mouse_event *event)
+static void send_hid_report(const struct hid_report_event *event)
 {
 	if (&state != event->subscriber) {
 		/* It's not us */
@@ -160,128 +168,41 @@ static void send_mouse_report(const struct hid_mouse_event *event)
 
 	if (state != USB_STATE_ACTIVE) {
 		/* USB not connected. */
-		return;
-	}
-
-	u8_t buffer[(hid_protocol) ?
-		    REPORT_SIZE_MOUSE + sizeof(u8_t) :
-		    REPORT_SIZE_MOUSE_BOOT];
-
-	if (hid_protocol == HID_PROTOCOL_REPORT) {
-		s16_t wheel = MAX(MIN(event->wheel, MOUSE_REPORT_WHEEL_MAX),
-				MOUSE_REPORT_WHEEL_MIN);
-		s16_t x = MAX(MIN(event->dx, MOUSE_REPORT_XY_MAX),
-				MOUSE_REPORT_XY_MIN);
-		s16_t y = MAX(MIN(event->dy, MOUSE_REPORT_XY_MAX),
-				MOUSE_REPORT_XY_MIN);
-		/* Convert to little-endian. */
-		u8_t x_buff[2];
-		u8_t y_buff[2];
-
-		sys_put_le16(x, x_buff);
-		sys_put_le16(y, y_buff);
-
-		__ASSERT(sizeof(buffer) == 6, "Invalid report size");
-
-		/* Encode report. */
-		buffer[0] = REPORT_ID_MOUSE;
-		buffer[1] = event->button_bm;
-		buffer[2] = wheel;
-		buffer[3] = x_buff[0];
-		buffer[4] = (y_buff[0] << 4) | (x_buff[1] & 0x0f);
-		buffer[5] = (y_buff[1] << 4) | (y_buff[0] >> 4);
-
-	} else {
-		s8_t x = MAX(MIN(event->dx, MOUSE_REPORT_XY_MAX_BOOT),
-				MOUSE_REPORT_XY_MIN_BOOT);
-		s8_t y = MAX(MIN(event->dy, MOUSE_REPORT_XY_MAX_BOOT),
-				MOUSE_REPORT_XY_MIN_BOOT);
-
-		__ASSERT(sizeof(buffer) == 3, "Invalid boot report size");
-
-		buffer[0] = event->button_bm;
-		buffer[1] = x;
-		buffer[2] = y;
-
-	}
-
-	__ASSERT_NO_MSG(sent_report_type == IN_REPORT_COUNT);
-	sent_report_type = IN_REPORT_MOUSE;
-
-	int err = hid_int_ep_write(usb_dev, buffer, sizeof(buffer), NULL);
-
-	if (err) {
-		LOG_ERR("Cannot send report (%d)", err);
+		sent_report_id = event->dyndata.data[0];
 		report_sent(true);
-	}
-}
-
-static void send_keyboard_report(const struct hid_keyboard_event *event)
-{
-	if (&state != event->subscriber) {
-		/* It's not us */
 		return;
 	}
 
-	if (state != USB_STATE_ACTIVE) {
-		/* USB not connected. */
-		return;
-	}
+	const u8_t *report_buffer = event->dyndata.data;
+	size_t report_size = event->dyndata.size;
 
-	u8_t buffer[REPORT_SIZE_KEYBOARD_KEYS + sizeof(u8_t)];
+	__ASSERT_NO_MSG(report_size > 0);
+	__ASSERT_NO_MSG(sent_report_id == REPORT_ID_COUNT);
 
-	if (hid_protocol == HID_PROTOCOL_REPORT) {
-		__ASSERT(sizeof(buffer) == 9, "Invalid report size");
-		/* Encode report. */
-		buffer[0] = REPORT_ID_KEYBOARD_KEYS;
-		buffer[1] = event->modifier_bm;
-		buffer[2] = 0;
-		memcpy(&buffer[3], event->keys, ARRAY_SIZE(event->keys));
+	if (hid_protocol != HID_PROTOCOL_REPORT) {
+		if ((IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_MOUSE) &&
+		     (report_buffer[0] == REPORT_ID_BOOT_MOUSE)) ||
+		    (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_KEYBOARD) &&
+		     (report_buffer[0] == REPORT_ID_BOOT_KEYBOARD))) {
+			sent_report_id = event->dyndata.data[0];
+			/* For boot protocol omit the first byte. */
+			report_buffer++;
+			report_size--;
+			__ASSERT_NO_MSG(report_size > 0);
+		} else {
+			/* Boot protocol is not supported or this is not a
+			 * boot report.
+			 */
+			sent_report_id = event->dyndata.data[0];
+			report_sent(true);
+			return;
+		}
 	} else {
-		__ASSERT_NO_MSG(false);
+		sent_report_id = event->dyndata.data[0];
 	}
 
-	__ASSERT_NO_MSG(sent_report_type == IN_REPORT_COUNT);
-	sent_report_type = IN_REPORT_KEYBOARD_KEYS;
-
-	int err = hid_int_ep_write(usb_dev, buffer, sizeof(buffer), NULL);
-
-	if (err) {
-		LOG_ERR("Cannot send report (%d)", err);
-		report_sent(true);
-	}
-}
-
-static void send_consumer_ctrl_report(const struct hid_consumer_ctrl_event *event)
-{
-	if (&state != event->subscriber) {
-		/* It's not us */
-		return;
-	}
-
-	if (state != USB_STATE_ACTIVE) {
-		/* USB not connected. */
-		return;
-	}
-
-	u8_t buffer[REPORT_SIZE_CONSUMER_CTRL + sizeof(u8_t)];
-
-	if (hid_protocol == HID_PROTOCOL_REPORT) {
-		__ASSERT(sizeof(buffer) == 3, "Invalid report size");
-		/* Encode report. */
-		buffer[0] = REPORT_ID_CONSUMER_CTRL;
-		sys_put_le16(event->usage, &buffer[1]);
-	} else {
-		/* Do not send when in boot mode. */
-		sent_report_type = IN_REPORT_CONSUMER_CTRL;
-		report_sent(false);
-		return;
-	}
-
-	__ASSERT_NO_MSG(sent_report_type == IN_REPORT_COUNT);
-	sent_report_type = IN_REPORT_CONSUMER_CTRL;
-
-	int err = hid_int_ep_write(usb_dev, buffer, sizeof(buffer), NULL);
+	int err = hid_int_ep_write(usb_dev, event->dyndata.data,
+				   event->dyndata.size, NULL);
 
 	if (err) {
 		LOG_ERR("Cannot send report (%d)", err);
@@ -301,48 +222,100 @@ static void broadcast_usb_state(void)
 
 static void reset_pending_report(void)
 {
-	if (sent_report_type != IN_REPORT_COUNT) {
+	if (sent_report_id != REPORT_ID_COUNT) {
 		LOG_WRN("USB clear report notification waiting flag");
-		sent_report_type = IN_REPORT_COUNT;
+		report_sent(true);
 	}
 }
 
 static void broadcast_subscription_change(void)
 {
-	if (IS_ENABLED(CONFIG_DESKTOP_HID_MOUSE)) {
-		struct hid_report_subscription_event *event_mouse =
+	static bool report_enabled[REPORT_ID_COUNT];
+
+	bool new_rep_enabled = (state == USB_STATE_ACTIVE) &&
+			       (hid_protocol == HID_PROTOCOL_REPORT);
+	bool new_boot_enabled = (state == USB_STATE_ACTIVE) &&
+				(hid_protocol == HID_PROTOCOL_BOOT);
+
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_REPORT_MOUSE_SUPPORT) &&
+	    (new_rep_enabled != report_enabled[REPORT_ID_MOUSE])) {
+		struct hid_report_subscription_event *event =
 			new_hid_report_subscription_event();
 
-		event_mouse->report_type = IN_REPORT_MOUSE;
-		event_mouse->enabled     = (state == USB_STATE_ACTIVE);
-		event_mouse->subscriber  = &state;
+		event->report_id  = REPORT_ID_MOUSE;
+		event->enabled    = new_rep_enabled;
+		event->subscriber = &state;
 
-		EVENT_SUBMIT(event_mouse);
+		EVENT_SUBMIT(event);
+
+		report_enabled[REPORT_ID_MOUSE] = new_rep_enabled;
 	}
-
-	if (IS_ENABLED(CONFIG_DESKTOP_HID_KEYBOARD)) {
-		struct hid_report_subscription_event *event_kbd =
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_REPORT_KEYBOARD_SUPPORT) &&
+	    (new_rep_enabled != report_enabled[REPORT_ID_KEYBOARD_KEYS])) {
+		struct hid_report_subscription_event *event =
 			new_hid_report_subscription_event();
 
-		event_kbd->report_type = IN_REPORT_KEYBOARD_KEYS;
-		event_kbd->enabled     = (state == USB_STATE_ACTIVE);
-		event_kbd->subscriber  = &state;
+		event->report_id  = REPORT_ID_KEYBOARD_KEYS;
+		event->enabled    = new_rep_enabled;
+		event->subscriber = &state;
 
-		EVENT_SUBMIT(event_kbd);
+		EVENT_SUBMIT(event);
+
+		report_enabled[REPORT_ID_KEYBOARD_KEYS] = new_rep_enabled;
 	}
-
-	if (IS_ENABLED(CONFIG_DESKTOP_HID_CONSUMER_CTRL)) {
-		struct hid_report_subscription_event *event_consumer_ctrl =
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_REPORT_SYSTEM_CTRL_SUPPORT) &&
+	    (new_rep_enabled != report_enabled[REPORT_ID_SYSTEM_CTRL])) {
+		struct hid_report_subscription_event *event =
 			new_hid_report_subscription_event();
 
-		event_consumer_ctrl->report_type = IN_REPORT_CONSUMER_CTRL;
-		event_consumer_ctrl->enabled     = (state == USB_STATE_ACTIVE);
-		event_consumer_ctrl->subscriber  = &state;
+		event->report_id  = REPORT_ID_SYSTEM_CTRL;
+		event->enabled    = new_rep_enabled;
+		event->subscriber = &state;
 
-		EVENT_SUBMIT(event_consumer_ctrl);
+		EVENT_SUBMIT(event);
+		report_enabled[REPORT_ID_SYSTEM_CTRL] = new_rep_enabled;
+	}
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_REPORT_CONSUMER_CTRL_SUPPORT) &&
+	    (new_rep_enabled != report_enabled[REPORT_ID_CONSUMER_CTRL])) {
+		struct hid_report_subscription_event *event =
+			new_hid_report_subscription_event();
+
+		event->report_id  = REPORT_ID_CONSUMER_CTRL;
+		event->enabled    = new_rep_enabled;
+		event->subscriber = &state;
+
+		EVENT_SUBMIT(event);
+		report_enabled[REPORT_ID_CONSUMER_CTRL] = new_rep_enabled;
+	}
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_MOUSE) &&
+	    (new_boot_enabled != report_enabled[REPORT_ID_BOOT_MOUSE])) {
+		struct hid_report_subscription_event *event =
+			new_hid_report_subscription_event();
+
+		event->report_id  = REPORT_ID_BOOT_MOUSE;
+		event->enabled    = new_boot_enabled;
+		event->subscriber = &state;
+
+		EVENT_SUBMIT(event);
+		report_enabled[REPORT_ID_BOOT_MOUSE] = new_boot_enabled;
+	}
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_KEYBOARD) &&
+	    (new_boot_enabled != report_enabled[REPORT_ID_BOOT_KEYBOARD])) {
+		struct hid_report_subscription_event *event =
+			new_hid_report_subscription_event();
+
+		event->report_id  = REPORT_ID_BOOT_KEYBOARD;
+		event->enabled    = new_boot_enabled;
+		event->subscriber = &state;
+
+		EVENT_SUBMIT(event);
+		report_enabled[REPORT_ID_BOOT_KEYBOARD] = new_boot_enabled;
 	}
 
 	LOG_INF("USB HID %sabled", (state == USB_STATE_ACTIVE) ? ("en"):("dis"));
+	if (state == USB_STATE_ACTIVE) {
+		LOG_INF("%s_PROTOCOL active", hid_protocol ? "REPORT" : "BOOT");
+	}
 }
 
 static void device_status(enum usb_dc_status_code cb_status, const u8_t *param)
@@ -359,7 +332,6 @@ static void device_status(enum usb_dc_status_code cb_status, const u8_t *param)
 		break;
 
 	case USB_DC_DISCONNECTED:
-		__ASSERT_NO_MSG(state != USB_STATE_DISCONNECTED);
 		new_state = USB_STATE_DISCONNECTED;
 		break;
 
@@ -403,6 +375,10 @@ static void device_status(enum usb_dc_status_code cb_status, const u8_t *param)
 		/* Ignore */
 		break;
 
+	case USB_DC_INTERFACE:
+		/* Ignore */
+		break;
+
 	case USB_DC_ERROR:
 		module_set_state(MODULE_STATE_ERROR);
 		break;
@@ -426,6 +402,7 @@ static void device_status(enum usb_dc_status_code cb_status, const u8_t *param)
 		broadcast_usb_state();
 
 		if (new_state == USB_STATE_ACTIVE) {
+			hid_protocol = HID_PROTOCOL_REPORT;
 			broadcast_subscription_change();
 		}
 
@@ -438,8 +415,33 @@ static void device_status(enum usb_dc_status_code cb_status, const u8_t *param)
 
 static void protocol_change(u8_t protocol)
 {
+	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_DISABLED) ==
+			 !IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL),
+			 "Boot protocol setup inconsistency");
+	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_KEYBOARD) ==
+			 (IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL) && (CONFIG_USB_HID_PROTOCOL_CODE == 1)),
+			 "Boot protocol code does not reflect selected interface");
+	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_MOUSE) ==
+			 (IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL) && (CONFIG_USB_HID_PROTOCOL_CODE == 2)),
+			 "Boot protocol code does not reflect selected interface");
+
+	if ((protocol != HID_PROTOCOL_BOOT) &&
+	    (protocol != HID_PROTOCOL_REPORT)) {
+		__ASSERT_NO_MSG(false);
+		return;
+	}
+
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_DISABLED) &&
+	    (protocol == HID_PROTOCOL_BOOT)) {
+		LOG_WRN("BOOT protocol is not supported");
+		return;
+	}
+
 	hid_protocol = protocol;
-	LOG_INF("%s_PROTOCOL selected", protocol ? "REPORT" : "BOOT");
+
+	if (state == USB_STATE_ACTIVE) {
+		broadcast_subscription_change();
+	}
 }
 
 static int usb_init(void)
@@ -453,7 +455,6 @@ static int usb_init(void)
 		.get_report   		= get_report,
 		.set_report   		= set_report,
 		.int_in_ready		= report_sent_cb,
-		.status_cb    		= device_status,
 		.protocol_change 	= protocol_change,
 	};
 
@@ -463,6 +464,13 @@ static int usb_init(void)
 	int err = usb_hid_init(usb_dev);
 	if (err) {
 		LOG_ERR("Cannot initialize HID class");
+		return err;
+	}
+
+	err = usb_enable(device_status);
+	if (err) {
+		LOG_ERR("Cannot enable USB");
+		return err;
 	}
 
 	if (IS_ENABLED(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE)) {
@@ -474,23 +482,8 @@ static int usb_init(void)
 
 static bool event_handler(const struct event_header *eh)
 {
-	if (IS_ENABLED(CONFIG_DESKTOP_HID_MOUSE) &&
-	    is_hid_mouse_event(eh)) {
-		send_mouse_report(cast_hid_mouse_event(eh));
-
-		return false;
-	}
-
-	if (IS_ENABLED(CONFIG_DESKTOP_HID_KEYBOARD) &&
-	    is_hid_keyboard_event(eh)) {
-		send_keyboard_report(cast_hid_keyboard_event(eh));
-
-		return false;
-	}
-
-	if (IS_ENABLED(CONFIG_DESKTOP_HID_CONSUMER_CTRL) &&
-	    is_hid_consumer_ctrl_event(eh)) {
-		send_consumer_ctrl_report(cast_hid_consumer_ctrl_event(eh));
+	if (is_hid_report_event(eh)) {
+		send_hid_report(cast_hid_report_event(eh));
 
 		return false;
 	}
@@ -545,9 +538,7 @@ static bool event_handler(const struct event_header *eh)
 }
 EVENT_LISTENER(MODULE, event_handler);
 EVENT_SUBSCRIBE(MODULE, module_state_event);
-EVENT_SUBSCRIBE(MODULE, hid_mouse_event);
-EVENT_SUBSCRIBE(MODULE, hid_keyboard_event);
-EVENT_SUBSCRIBE(MODULE, hid_consumer_ctrl_event);
+EVENT_SUBSCRIBE(MODULE, hid_report_event);
 #if CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE
 EVENT_SUBSCRIBE(MODULE, config_forwarded_event);
 EVENT_SUBSCRIBE(MODULE, config_fetch_event);

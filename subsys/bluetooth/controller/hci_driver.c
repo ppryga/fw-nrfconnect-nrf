@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
 
-#include <bluetooth/hci_driver.h>
+#include <drivers/bluetooth/hci_driver.h>
+#include <bluetooth/hci_vs.h>
 #include <init.h>
 #include <irq.h>
 #include <kernel.h>
@@ -14,6 +15,7 @@
 
 #include <ble_controller.h>
 #include <ble_controller_hci.h>
+#include <ble_controller_hci_vs.h>
 #include "multithreading_lock.h"
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
@@ -25,6 +27,7 @@ static K_SEM_DEFINE(sem_recv, 0, 1);
 static struct k_thread recv_thread_data;
 static K_THREAD_STACK_DEFINE(recv_thread_stack, CONFIG_BLECTLR_RX_STACK_SIZE);
 
+#if defined(CONFIG_BT_CONN)
 /* It should not be possible to set CONFIG_BLECTRL_SLAVE_COUNT larger than
  * CONFIG_BT_MAX_CONN. Kconfig should make sure of that, this assert is to
  * verify that assumption.
@@ -32,6 +35,12 @@ static K_THREAD_STACK_DEFINE(recv_thread_stack, CONFIG_BLECTLR_RX_STACK_SIZE);
 BUILD_ASSERT(CONFIG_BLECTRL_SLAVE_COUNT <= CONFIG_BT_MAX_CONN);
 
 #define BLECTRL_MASTER_COUNT (CONFIG_BT_MAX_CONN - CONFIG_BLECTRL_SLAVE_COUNT)
+
+#else
+
+#define BLECTRL_MASTER_COUNT 0
+
+#endif /* CONFIG_BT_CONN */
 
 BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_CENTRAL) ||
 			 (BLECTRL_MASTER_COUNT > 0));
@@ -158,18 +167,12 @@ static int hci_driver_send(struct net_buf *buf)
 	return err;
 }
 
-#ifndef bt_acl_flag_pb
-/* Temporary defines, missing from hci.h */
-#define bt_acl_flags_pb(h)		((h) >> 12 & BIT_MASK(2))
-#define bt_acl_flags_bc(h)		((h) >> 14 & BIT_MASK(2))
-#endif /* bt_acl_flag_pb */
-
 static void data_packet_process(u8_t *hci_buf)
 {
 	struct net_buf *data_buf = bt_buf_get_rx(BT_BUF_ACL_IN, K_FOREVER);
 	struct bt_hci_acl_hdr *hdr = (void *)hci_buf;
 	u16_t hf, handle, len;
-	u8_t pb, bc;
+	u8_t flags, pb, bc;
 
 	if (!data_buf) {
 		BT_ERR("No data buffer available");
@@ -179,8 +182,9 @@ static void data_packet_process(u8_t *hci_buf)
 	len = sys_le16_to_cpu(hdr->len);
 	hf = sys_le16_to_cpu(hdr->handle);
 	handle = bt_acl_handle(hf);
-	pb = bt_acl_flags_pb(hf);
-	bc = bt_acl_flags_bc(hf);
+	flags = bt_acl_flags(hf);
+	pb = bt_acl_flags_pb(flags);
+	bc = bt_acl_flags_bc(flags);
 
 	BT_DBG("Data: handle (0x%02x), PB(%01d), BC(%01d), len(%u)", handle,
 	       pb, bc, len);
@@ -189,22 +193,43 @@ static void data_packet_process(u8_t *hci_buf)
 	bt_recv(data_buf);
 }
 
-static void event_packet_process(u8_t *hci_buf)
+static bool event_packet_is_discardable(const u8_t *hci_buf)
 {
 	struct bt_hci_evt_hdr *hdr = (void *)hci_buf;
+
+	switch (hdr->evt) {
+	case BT_HCI_EVT_LE_META_EVENT: {
+		struct bt_hci_evt_le_meta_event *me = (void *)&hci_buf[2];
+
+		switch (me->subevent) {
+		case BT_HCI_EVT_LE_ADVERTISING_REPORT:
+		case BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT:
+			return true;
+		default:
+			return false;
+		}
+	}
+	case BT_HCI_EVT_VENDOR:
+	{
+		u8_t subevent = hci_buf[2];
+
+		switch (subevent) {
+		case HCI_VS_SUBEVENT_QOS_CONN_EVENT_REPORT:
+			return true;
+		default:
+			return false;
+		}
+	}
+	default:
+		return false;
+	}
+}
+
+static void event_packet_process(u8_t *hci_buf)
+{
+	bool discardable = event_packet_is_discardable(hci_buf);
+	struct bt_hci_evt_hdr *hdr = (void *)hci_buf;
 	struct net_buf *evt_buf;
-
-	if (hdr->evt == BT_HCI_EVT_CMD_COMPLETE ||
-	    hdr->evt == BT_HCI_EVT_CMD_STATUS) {
-		evt_buf = bt_buf_get_cmd_complete(K_FOREVER);
-	} else {
-		evt_buf = bt_buf_get_rx(BT_BUF_EVT, K_FOREVER);
-	}
-
-	if (!evt_buf) {
-		BT_ERR("No event buffer available");
-		return;
-	}
 
 	if (hdr->evt == BT_HCI_EVT_LE_META_EVENT) {
 		struct bt_hci_evt_le_meta_event *me = (void *)&hci_buf[2];
@@ -227,6 +252,19 @@ static void event_packet_process(u8_t *hci_buf)
 		       opcode, cs->status);
 	} else {
 		BT_DBG("Event (0x%02x) len %u", hdr->evt, hdr->len);
+	}
+
+	evt_buf = bt_buf_get_evt(hdr->evt, discardable,
+				 discardable ? K_NO_WAIT : K_FOREVER);
+
+	if (!evt_buf) {
+		if (discardable) {
+			BT_DBG("Discarding event");
+			return;
+		}
+
+		BT_ERR("No event buffer available");
+		return;
 	}
 
 	net_buf_add_mem(evt_buf, &hci_buf[0], hdr->len + sizeof(*hdr));
@@ -299,6 +337,12 @@ static void recv_thread(void *p1, void *p2, void *p3)
 	}
 }
 
+void host_signal(void)
+{
+	/* Wake up the RX event/data thread */
+	k_sem_give(&sem_recv);
+}
+
 static int hci_driver_open(void)
 {
 	BT_DBG("Open");
@@ -314,52 +358,6 @@ static int hci_driver_open(void)
 	LOG_HEXDUMP_INF(build_revision, sizeof(build_revision),
 			"BLE controller build revision: ");
 
-	return 0;
-}
-
-static const struct bt_hci_driver drv = {
-	.name = "Controller",
-	.bus = BT_HCI_DRIVER_BUS_VIRTUAL,
-	.open = hci_driver_open,
-	.send = hci_driver_send,
-};
-
-void host_signal(void)
-{
-	/* Wake up the RX event/data thread */
-	k_sem_give(&sem_recv);
-}
-
-u8_t bt_read_static_addr(bt_addr_le_t *addr)
-{
-	if (((NRF_FICR->DEVICEADDR[0] != UINT32_MAX) ||
-	     ((NRF_FICR->DEVICEADDR[1] & UINT16_MAX) != UINT16_MAX)) &&
-	    (NRF_FICR->DEVICEADDRTYPE & 0x01)) {
-		sys_put_le32(NRF_FICR->DEVICEADDR[0], &addr->a.val[0]);
-		sys_put_le16(NRF_FICR->DEVICEADDR[1], &addr->a.val[4]);
-
-		/* The FICR value is a just a random number, with no knowledge
-		 * of the Bluetooth Specification requirements for random
-		 * static addresses.
-		 */
-		BT_ADDR_SET_STATIC(&addr->a);
-
-		addr->type = BT_ADDR_LE_RANDOM;
-		return 1;
-	}
-	return 0;
-}
-
-static int ble_init(struct device *unused)
-{
-	int err = 0;
-
-	err = ble_controller_init(blectlr_assertion_handler);
-	return err;
-}
-
-static int ble_enable(void)
-{
 	int err;
 	int required_memory;
 	ble_controller_cfg_t cfg;
@@ -426,6 +424,20 @@ static int ble_enable(void)
 		}
 	}
 
+	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_2M)) {
+		err = ble_controller_support_le_2m_phy();
+		if (err) {
+			return -ENOTSUP;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
+		err = ble_controller_support_le_coded_phy();
+		if (err) {
+			return -ENOTSUP;
+		}
+	}
+
 	err = MULTITHREADING_LOCK_ACQUIRE();
 	if (!err) {
 		err = ble_controller_enable(host_signal,
@@ -439,22 +451,64 @@ static int ble_enable(void)
 	return 0;
 }
 
-static int hci_driver_init(struct device *unused)
+static const struct bt_hci_driver drv = {
+	.name = "Controller",
+	.bus = BT_HCI_DRIVER_BUS_VIRTUAL,
+	.open = hci_driver_open,
+	.send = hci_driver_send,
+};
+
+#if !defined(CONFIG_BT_HCI_VS_EXT)
+uint8_t bt_read_static_addr(struct bt_hci_vs_static_addr addrs[], uint8_t size)
 {
-	ARG_UNUSED(unused);
+	/* only one supported */
+	ARG_UNUSED(size);
 
-	bt_hci_driver_register(&drv);
+	if (((NRF_FICR->DEVICEADDR[0] != UINT32_MAX) ||
+	    ((NRF_FICR->DEVICEADDR[1] & UINT16_MAX) != UINT16_MAX)) &&
+	     (NRF_FICR->DEVICEADDRTYPE & 0x01)) {
+		sys_put_le32(NRF_FICR->DEVICEADDR[0], &addrs[0].bdaddr.val[0]);
+		sys_put_le16(NRF_FICR->DEVICEADDR[1], &addrs[0].bdaddr.val[4]);
 
-	int err = 0;
+		/* The FICR value is a just a random number, with no knowledge
+		 * of the Bluetooth Specification requirements for random
+		 * static addresses.
+		 */
+		BT_ADDR_SET_STATIC(&addrs[0].bdaddr);
 
-	err = ble_enable();
+		/* If no public address is provided and a static address is
+		 * available, then it is recommended to return an identity root
+		 * key (if available) from this command.
+		 */
+		if ((NRF_FICR->IR[0] != UINT32_MAX) &&
+		    (NRF_FICR->IR[1] != UINT32_MAX) &&
+		    (NRF_FICR->IR[2] != UINT32_MAX) &&
+		    (NRF_FICR->IR[3] != UINT32_MAX)) {
+			sys_put_le32(NRF_FICR->IR[0], &addrs[0].ir[0]);
+			sys_put_le32(NRF_FICR->IR[1], &addrs[0].ir[4]);
+			sys_put_le32(NRF_FICR->IR[2], &addrs[0].ir[8]);
+			sys_put_le32(NRF_FICR->IR[3], &addrs[0].ir[12]);
+		} else {
+			/* Mark IR as invalid */
+			(void)memset(addrs[0].ir, 0x00, sizeof(addrs[0].ir));
+		}
 
-	if (err < 0) {
-		return err;
+		return 1;
 	}
 
 	return 0;
 }
+#endif /* !defined(CONFIG_BT_HCI_VS_EXT) */
+
+static int hci_driver_init(struct device *unused)
+{
+	ARG_UNUSED(unused);
+	int err = 0;
+
+	bt_hci_driver_register(&drv);
+
+	err = ble_controller_init(blectlr_assertion_handler);
+	return err;
+}
 
 SYS_INIT(hci_driver_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
-SYS_INIT(ble_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

@@ -8,9 +8,9 @@
 
 #include <soc.h>
 #include <device.h>
-#include <adc.h>
-#include <gpio.h>
-#include <atomic.h>
+#include <drivers/adc.h>
+#include <drivers/gpio.h>
+#include <sys/atomic.h>
 
 #include <hal/nrf_saadc.h>
 
@@ -25,7 +25,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_BATTERY_MEAS_LOG_LEVEL);
 
-#define ADC_DEVICE_NAME		DT_ADC_0_NAME
+#define ADC_DEVICE_NAME		DT_LABEL(DT_ALIAS(adc_0))
 #define ADC_RESOLUTION		12
 #define ADC_OVERSAMPLING	4 /* 2^ADC_OVERSAMPLING samples are averaged */
 #define ADC_MAX 		4096
@@ -91,7 +91,7 @@ static int init_adc(void)
 	}
 
 	/* Check if number of elements in LUT is proper */
-	BUILD_ASSERT_MSG(CONFIG_DESKTOP_BATTERY_MEAS_MAX_LEVEL
+	BUILD_ASSERT(CONFIG_DESKTOP_BATTERY_MEAS_MAX_LEVEL
 			 - CONFIG_DESKTOP_BATTERY_MEAS_MIN_LEVEL
 			 == (ARRAY_SIZE(battery_voltage_to_soc) - 1)
 			 * CONFIG_DESKTOP_VOLTAGE_TO_SOC_DELTA,
@@ -103,9 +103,9 @@ static int init_adc(void)
 static int battery_monitor_start(void)
 {
 	if (IS_ENABLED(CONFIG_DESKTOP_BATTERY_MEAS_HAS_ENABLE_PIN)) {
-		int err = gpio_pin_write(gpio_dev,
-					 CONFIG_DESKTOP_BATTERY_MEAS_ENABLE_PIN,
-					 1);
+		int err = gpio_pin_set_raw(gpio_dev,
+					   CONFIG_DESKTOP_BATTERY_MEAS_ENABLE_PIN,
+					   1);
 		if (err) {
 			 LOG_ERR("Cannot enable battery monitor circuit");
 			 return err;
@@ -126,9 +126,9 @@ static void battery_monitor_stop(void)
 	int err = 0;
 
 	if (IS_ENABLED(CONFIG_DESKTOP_BATTERY_MEAS_HAS_ENABLE_PIN)) {
-		err = gpio_pin_write(gpio_dev,
-				     CONFIG_DESKTOP_BATTERY_MEAS_ENABLE_PIN,
-				     0);
+		err = gpio_pin_set_raw(gpio_dev,
+				       CONFIG_DESKTOP_BATTERY_MEAS_ENABLE_PIN,
+				       0);
 		if (err) {
 			LOG_ERR("Cannot disable battery monitor circuit");
 			module_set_state(MODULE_STATE_ERROR);
@@ -228,7 +228,7 @@ static int init_fn(void)
 	int err = 0;
 
 	if (IS_ENABLED(CONFIG_DESKTOP_BATTERY_MEAS_HAS_ENABLE_PIN)) {
-		gpio_dev = device_get_binding(DT_GPIO_P0_DEV_NAME);
+		gpio_dev = device_get_binding(DT_LABEL(DT_NODELABEL(gpio0)));
 		if (!gpio_dev) {
 			LOG_ERR("Cannot get GPIO device");
 			err = -ENXIO;
@@ -238,7 +238,7 @@ static int init_fn(void)
 		/* Enable battery monitoring */
 		err = gpio_pin_configure(gpio_dev,
 					 CONFIG_DESKTOP_BATTERY_MEAS_ENABLE_PIN,
-					 GPIO_DIR_OUT);
+					 GPIO_OUTPUT);
 	}
 
 	if (!err) {

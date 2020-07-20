@@ -19,6 +19,10 @@
 
 #include "event_manager.h"
 
+#if CONFIG_DESKTOP_BLE_QOS_ENABLE
+#include "chmap_filter.h"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,6 +31,7 @@ extern "C" {
 /** @brief Peer connection state list. */
 #define PEER_STATE_LIST		\
 	X(DISCONNECTED)		\
+	X(DISCONNECTING)	\
 	X(CONNECTED)		\
 	X(SECURED)		\
 	X(CONN_FAILED)
@@ -93,6 +98,19 @@ struct ble_peer_operation_event {
 };
 EVENT_TYPE_DECLARE(ble_peer_operation_event);
 
+/** @brief BLE connection parameters event. */
+struct ble_peer_conn_params_event {
+	struct event_header header;
+
+	void *id;
+	u16_t interval_min;
+	u16_t interval_max;
+	u16_t latency;
+	u16_t timeout;
+	bool updated;
+};
+EVENT_TYPE_DECLARE(ble_peer_conn_params_event);
+
 /** @brief BLE peer search event. */
 struct ble_peer_search_event {
 	struct event_header header;
@@ -111,6 +129,22 @@ struct ble_discovery_complete_event {
 	enum peer_type peer_type;
 };
 EVENT_TYPE_DECLARE(ble_discovery_complete_event);
+
+/** @brief BLE SMP transfer event. */
+struct ble_smp_transfer_event {
+	struct event_header header;
+};
+EVENT_TYPE_DECLARE(ble_smp_transfer_event);
+
+#if CONFIG_DESKTOP_BLE_QOS_ENABLE
+/** @brief BLE QoS event. */
+struct ble_qos_event {
+	struct event_header header;
+
+	u8_t chmap[CHMAP_BLE_BITMASK_SIZE];
+};
+EVENT_TYPE_DECLARE(ble_qos_event);
+#endif
 
 #ifdef __cplusplus
 }

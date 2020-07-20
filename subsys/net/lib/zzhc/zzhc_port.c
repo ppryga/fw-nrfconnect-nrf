@@ -8,9 +8,9 @@
 LOG_MODULE_REGISTER(zzhc_port, CONFIG_ZZHC_LOG_LEVEL);
 
 #include <zephyr.h>
-#include <base64.h>
-#include <json.h>
-#include <at_cmd_parser/at_cmd_parser.h>
+#include <sys/base64.h>
+#include <data/json.h>
+#include <modem/at_cmd_parser.h>
 #include "zzhc_internal.h"
 
 #define AT_PARAMS_MAX     11        /** Max. # of AT-params to parse */
@@ -182,4 +182,3 @@ int zzhc_get_at_param_short(struct zzhc *ctx, char *data, int idx)
 
 	return evt;
 }
-

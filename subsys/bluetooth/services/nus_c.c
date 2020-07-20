@@ -88,6 +88,10 @@ int bt_gatt_nus_c_send(struct bt_gatt_nus_c *nus_c, const u8_t *data,
 {
 	int err;
 
+	if (!nus_c->conn) {
+		return -ENOTCONN;
+	}
+
 	if (atomic_test_and_set_bit(&nus_c->state, NUS_C_RX_WRITE_PENDING)) {
 		return -EALREADY;
 	}
@@ -109,12 +113,12 @@ int bt_gatt_nus_c_send(struct bt_gatt_nus_c *nus_c, const u8_t *data,
 int bt_gatt_nus_c_handles_assign(struct bt_gatt_dm *dm,
 				 struct bt_gatt_nus_c *nus_c)
 {
-	const struct bt_gatt_attr *gatt_service_attr =
+	const struct bt_gatt_dm_attr *gatt_service_attr =
 			bt_gatt_dm_service_get(dm);
 	const struct bt_gatt_service_val *gatt_service =
 			bt_gatt_dm_attr_service_val(gatt_service_attr);
-	const struct bt_gatt_attr *gatt_chrc;
-	const struct bt_gatt_attr *gatt_desc;
+	const struct bt_gatt_dm_attr *gatt_chrc;
+	const struct bt_gatt_dm_attr *gatt_desc;
 
 	if (bt_uuid_cmp(gatt_service->uuid, BT_UUID_NUS_SERVICE)) {
 		return -ENOTSUP;

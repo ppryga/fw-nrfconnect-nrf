@@ -5,10 +5,10 @@
  */
 
 #include <zephyr/types.h>
-#include <power.h>
+#include <power/power.h>
 
 #include <device.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <hal/nrf_power.h>
 
 #include <profiler.h>
@@ -26,8 +26,10 @@
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_POWER_MANAGER_LOG_LEVEL);
 
 
-#define POWER_DOWN_ERROR_TIMEOUT K_SECONDS(CONFIG_DESKTOP_POWER_MANAGER_ERROR_TIMEOUT)
-#define POWER_DOWN_TIMEOUT_MS	 K_SECONDS(CONFIG_DESKTOP_POWER_MANAGER_TIMEOUT)
+#define POWER_DOWN_ERROR_TIMEOUT \
+	K_SECONDS(CONFIG_DESKTOP_POWER_MANAGER_ERROR_TIMEOUT)
+#define POWER_DOWN_TIMEOUT_MS \
+	(CONFIG_DESKTOP_POWER_MANAGER_TIMEOUT * MSEC_PER_SEC)
 #define POWER_DOWN_CHECK_MS	 1000
 
 enum power_state {
@@ -67,7 +69,7 @@ static void power_down(struct k_work *work)
 		EVENT_SUBMIT(event);
 	} else {
 		k_delayed_work_submit(&power_down_trigger,
-				      POWER_DOWN_CHECK_MS);
+				      K_MSEC(POWER_DOWN_CHECK_MS));
 	}
 }
 
@@ -92,6 +94,11 @@ static void power_down_counter_reset(void)
 enum power_states sys_pm_policy_next_state(s32_t ticks)
 {
 	return SYS_POWER_STATE_ACTIVE;
+}
+
+bool sys_pm_policy_low_power_devices(enum power_states pm_state)
+{
+	return sys_pm_is_sleep_state(pm_state);
 }
 
 static void system_off(void)
@@ -120,8 +127,7 @@ static void error(struct k_work *work)
 
 static bool event_handler(const struct event_header *eh)
 {
-	if ((IS_ENABLED(CONFIG_DESKTOP_HID_MOUSE) && is_hid_mouse_event(eh)) ||
-	    (IS_ENABLED(CONFIG_DESKTOP_HID_KEYBOARD) && is_hid_keyboard_event(eh))) {
+	if (is_hid_report_event(eh)) {
 		/* Device is connected and sends reports to host. */
 		power_down_counter_reset();
 
@@ -178,7 +184,7 @@ static bool event_handler(const struct event_header *eh)
 		if (!usb_connected) {
 			power_down_counter_reset();
 			k_delayed_work_submit(&power_down_trigger,
-					      POWER_DOWN_CHECK_MS);
+					      K_MSEC(POWER_DOWN_CHECK_MS));
 		}
 
 		return false;
@@ -200,6 +206,7 @@ static bool event_handler(const struct event_header *eh)
 
 		case PEER_STATE_SECURED:
 		case PEER_STATE_CONN_FAILED:
+		case PEER_STATE_DISCONNECTING:
 			/* No action */
 			break;
 
@@ -245,7 +252,7 @@ static bool event_handler(const struct event_header *eh)
 			usb_connected = false;
 			power_down_counter_reset();
 			k_delayed_work_submit(&power_down_trigger,
-					      POWER_DOWN_CHECK_MS);
+					      K_MSEC(POWER_DOWN_CHECK_MS));
 			break;
 
 		default:
@@ -289,7 +296,7 @@ static bool event_handler(const struct event_header *eh)
 			k_delayed_work_init(&error_trigger, error);
 			k_delayed_work_init(&power_down_trigger, power_down);
 			k_delayed_work_submit(&power_down_trigger,
-					      POWER_DOWN_CHECK_MS);
+					      K_MSEC(POWER_DOWN_CHECK_MS));
 		} else if (event->state == MODULE_STATE_ERROR) {
 			power_state = POWER_STATE_ERROR;
 			k_delayed_work_cancel(&power_down_trigger);
@@ -312,7 +319,6 @@ EVENT_LISTENER(MODULE, event_handler);
 EVENT_SUBSCRIBE(MODULE, module_state_event);
 EVENT_SUBSCRIBE(MODULE, ble_peer_event);
 EVENT_SUBSCRIBE(MODULE, usb_state_event);
+EVENT_SUBSCRIBE(MODULE, hid_report_event);
 EVENT_SUBSCRIBE_EARLY(MODULE, wake_up_event);
-EVENT_SUBSCRIBE(MODULE, hid_mouse_event);
-EVENT_SUBSCRIBE(MODULE, hid_keyboard_event);
 EVENT_SUBSCRIBE_FINAL(MODULE, power_down_event);

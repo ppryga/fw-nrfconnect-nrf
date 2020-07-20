@@ -32,7 +32,7 @@
  */
 #define KEY_READVAL_MASK DK_BTN1_MSK
 
-#define BAS_READ_VALUE_INTERVAL K_SECONDS(10)
+#define BAS_READ_VALUE_INTERVAL (10 * MSEC_PER_SEC)
 
 
 static struct bt_conn *default_conn;
@@ -72,7 +72,30 @@ static void scan_connecting(struct bt_scan_device_info *device_info,
 	default_conn = bt_conn_ref(conn);
 }
 
-BT_SCAN_CB_INIT(scan_cb, scan_filter_match, NULL,
+static void scan_filter_no_match(struct bt_scan_device_info *device_info,
+				 bool connectable)
+{
+	int err;
+	struct bt_conn *conn;
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	if (device_info->adv_info.adv_type == BT_GAP_ADV_TYPE_ADV_DIRECT_IND) {
+		bt_addr_le_to_str(device_info->addr, addr, sizeof(addr));
+		printk("Direct advertising received from %s\n", addr);
+		bt_scan_stop();
+
+		err = bt_conn_le_create(device_info->addr,
+					BT_CONN_LE_CREATE_CONN,
+					device_info->conn_param, &conn);
+
+		if (!err) {
+			default_conn = bt_conn_ref(conn);
+			bt_conn_unref(conn);
+		}
+	}
+}
+
+BT_SCAN_CB_INIT(scan_cb, scan_filter_match, scan_filter_no_match,
 		scan_connecting_error, scan_connecting);
 
 static void discovery_completed_cb(struct bt_gatt_dm *dm,

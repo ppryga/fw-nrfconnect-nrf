@@ -1,4 +1,4 @@
-# Kconfig - nRF9160 GPS driver
+# nRF9160 GPS driver
 #
 # Copyright (c) 2019 Nordic Semiconductor
 #
@@ -8,9 +8,9 @@
 menuconfig NRF9160_GPS
 	bool "nRF9160 GPS driver [experimental]"
 	depends on BSD_LIBRARY
-	# FP_SHARING needs to be enabled if FLOAT is enabled, as other contexts
+	# FPU_SHARING needs to be enabled if FPU is enabled, as other contexts
 	# might also use the FPU.
-	select FP_SHARING if FLOAT
+	select FPU_SHARING if FPU
 	help
 	  Enable nRF9160 GPS driver.
 
@@ -26,9 +26,10 @@ config NRF9160_GPS_FIX_CHECK_INTERVAL
 
 config NRF9160_GPS_HANDLE_MODEM_CONFIGURATION
 	bool "The GPS driver will handle modem configuration directly"
+	depends on !LWM2M_CARRIER
+	depends on AT_CMD
+	depends on AT_CMD_PARSER
 	default y
-	select AT_CMD
-	select AT_CMD_PARSER
 	help
 	  Disabling this will cause the GPS driver to do no modem
 	  configuration.  This is useful if you need to remove the
@@ -41,25 +42,25 @@ if NRF9160_GPS_HANDLE_MODEM_CONFIGURATION
 
 config NRF9160_GPS_SET_MAGPIO
 	bool "Let the driver set MAGPIO configuration"
-	default y if BOARD_NRF9160_PCA10090NS
+	default y if BOARD_NRF9160DK_NRF9160NS
 
 if NRF9160_GPS_SET_MAGPIO
 
 config NRF9160_GPS_MAGPIO_STRING
 	string "MAGPIO string"
-	default "AT\%XMAGPIO=1,0,0,1,1,1574,1577" if BOARD_NRF9160_PCA10090NS
+	default "AT\%XMAGPIO=1,0,0,1,1,1565,1586" if BOARD_NRF9160DK_NRF9160NS
 
 endif # NRF9160_GPS_SET_MAGPIO
 
 config NRF9160_GPS_SET_COEX0
 	bool "Let the driver set COEX0 configuration"
-	default y if BOARD_NRF9160_PCA10090NS
+	default y if BOARD_NRF9160DK_NRF9160NS
 
 if NRF9160_GPS_SET_COEX0
 
 config NRF9160_GPS_COEX0_STRING
 	string "COEX0 string"
-	default "AT\%XCOEX0=1,1,1570,1580" if BOARD_NRF9160_PCA10090NS
+	default "AT\%XCOEX0=1,1,1565,1586" if BOARD_NRF9160DK_NRF9160NS
 
 endif # NRF9160_GPS_SET_COEX0
 

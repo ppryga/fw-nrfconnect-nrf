@@ -25,10 +25,42 @@ static struct download_client   dlc;
 static struct k_delayed_work    dlc_with_offset_work;
 static int socket_retries_left;
 
+static void send_evt(enum fota_download_evt_id id)
+{
+	__ASSERT(id != FOTA_DOWNLOAD_EVT_PROGRESS, "use send_progress");
+	const struct fota_download_evt evt = {
+		.id = id
+	};
+	callback(&evt);
+}
+
+static void send_progress(int progress)
+{
+#ifdef CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT
+	const struct fota_download_evt evt = { .id = FOTA_DOWNLOAD_EVT_PROGRESS,
+					       .progress = progress };
+	callback(&evt);
+#endif
+}
+
+static void dfu_target_callback_handler(enum dfu_target_evt_id evt)
+{
+	switch (evt) {
+	case DFU_TARGET_EVT_TIMEOUT:
+		send_evt(FOTA_DOWNLOAD_EVT_ERASE_PENDING);
+		break;
+	case DFU_TARGET_EVT_ERASE_DONE:
+		send_evt(FOTA_DOWNLOAD_EVT_ERASE_DONE);
+		break;
+	default:
+		send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+	}
+}
+
 static int download_client_callback(const struct download_client_evt *event)
 {
 	static bool first_fragment = true;
-	size_t file_size;
+	static size_t file_size;
 	size_t offset;
 	int err;
 
@@ -43,20 +75,32 @@ static int download_client_callback(const struct download_client_evt *event)
 			if (err != 0) {
 				LOG_DBG("download_client_file_size_get err: %d",
 					err);
-				callback(FOTA_DOWNLOAD_EVT_ERROR);
+				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
 				return err;
 			}
 			first_fragment = false;
 			int img_type = dfu_target_img_type(event->fragment.buf,
 							event->fragment.len);
-			err = dfu_target_init(img_type, file_size);
+			err = dfu_target_init(img_type, file_size,
+					      dfu_target_callback_handler);
 			if ((err < 0) && (err != -EBUSY)) {
 				LOG_ERR("dfu_target_init error %d", err);
+				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				int res = dfu_target_reset();
+
+				if (res != 0) {
+					LOG_ERR("Unable to reset DFU target");
+				}
+				first_fragment = true;
 				return err;
 			}
 
 			err = dfu_target_offset_get(&offset);
-			LOG_INF("Offset: 0x%x", offset);
+			if (err != 0) {
+				LOG_DBG("unable to get dfu target offset err: "
+					"%d", err);
+				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+			}
 
 			if (offset != 0) {
 				/* Abort current download procedure, and
@@ -74,9 +118,34 @@ static int download_client_callback(const struct download_client_evt *event)
 				       event->fragment.len);
 		if (err != 0) {
 			LOG_ERR("dfu_target_write error %d", err);
-			err = download_client_disconnect(&dlc);
-			callback(FOTA_DOWNLOAD_EVT_ERROR);
+			int res = dfu_target_done(false);
+
+			if (res != 0) {
+				LOG_ERR("Unable to free DFU target resources");
+			}
+			(void) download_client_disconnect(&dlc);
+			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
 			return err;
+		}
+
+		if (IS_ENABLED(CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT) &&
+		    !first_fragment) {
+			err = dfu_target_offset_get(&offset);
+			if (err != 0) {
+				LOG_DBG("unable to get dfu target "
+						"offset err: %d", err);
+				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				return err;
+			}
+
+			if (file_size == 0) {
+				LOG_DBG("invalid file size: %d", file_size);
+				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				return err;
+			}
+
+			send_progress((offset * 100) / file_size);
+			LOG_DBG("Progress: %d/%d%%", offset, file_size);
 		}
 	break;
 	}
@@ -85,16 +154,16 @@ static int download_client_callback(const struct download_client_evt *event)
 		err = dfu_target_done(true);
 		if (err != 0) {
 			LOG_ERR("dfu_target_done error: %d", err);
-			callback(FOTA_DOWNLOAD_EVT_ERROR);
+			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
 			return err;
 		}
 
 		err = download_client_disconnect(&dlc);
 		if (err != 0) {
-			callback(FOTA_DOWNLOAD_EVT_ERROR);
+			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
 			return err;
 		}
-		callback(FOTA_DOWNLOAD_EVT_FINISHED);
+		send_evt(FOTA_DOWNLOAD_EVT_FINISHED);
 		first_fragment = true;
 		break;
 
@@ -121,7 +190,7 @@ static int download_client_callback(const struct download_client_evt *event)
 					"used by dfu_target.");
 			}
 			first_fragment = true;
-			callback(FOTA_DOWNLOAD_EVT_ERROR);
+			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
 			/* Return non-zero to tell download_client to stop */
 			return event->error;
 		}
@@ -146,12 +215,15 @@ static void download_with_offset(struct k_work *unused)
 	}
 }
 
-int fota_download_start(char *host, char *file)
+int fota_download_start(const char *host, const char *file, int sec_tag,
+			u16_t port, const char *apn)
 {
 	int err = -1;
 
 	struct download_client_cfg config = {
-		.sec_tag = -1, /* HTTP */
+		.port = port,
+		.sec_tag = sec_tag,
+		.apn = apn,
 	};
 
 	if (host == NULL || file == NULL || callback == NULL) {
@@ -165,7 +237,7 @@ int fota_download_start(char *host, char *file)
 	 * (s0 or s1), and update file to point to correct candidate if
 	 * space separated file is given.
 	 */
-	char *update;
+	const char *update;
 	struct fw_info s0;
 	struct fw_info s1;
 
@@ -196,7 +268,6 @@ int fota_download_start(char *host, char *file)
 	if (err != 0) {
 		return err;
 	}
-
 
 	err = download_client_start(&dlc, file, 0);
 	if (err != 0) {

@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
 #
 
-add_subdirectory(provision)
+add_subdirectory(bl_boot)
 
 zephyr_include_directories(include)
 
@@ -15,4 +15,13 @@ if (NOT IMAGE_NAME)
           "the configuration 'CONFIG_SECURE_BOOTLOADER=y' in your applications "
           "'prj.conf'.")
   zephyr_include_directories(include/dummy_values/)
+endif()
+
+if (DEFINED CONFIG_SOC_NRF9160 OR DEFINED CONFIG_SOC_NRF5340_CPUAPP)
+  message(WARNING "
+      --------------------------------------------------------
+      --- WARNING: When using the immutable bootloader on  ---
+      --- this SoC, the UICR must be erased when flashing. ---
+      --- E.g. by calling 'west flash --erase'             ---
+      --------------------------------------------------------")
 endif()

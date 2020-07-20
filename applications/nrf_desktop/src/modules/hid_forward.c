@@ -8,7 +8,6 @@
 #include <sys/slist.h>
 
 #include <bluetooth/services/hids_c.h>
-#include <bluetooth/conn.h>
 #include <sys/byteorder.h>
 
 #define MODULE hid_forward
@@ -23,219 +22,82 @@
 #include "config_event.h"
 
 #include <logging/log.h>
-LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_BLE_SCANNING_LOG_LEVEL);
+LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_HID_FORWARD_LOG_LEVEL);
 
-#define LATENCY_LOW		0
-#define LATENCY_DEFAULT		99
+#define MAX_ENQUEUED_ITEMS	5
 
-#define FORWARD_TIMEOUT		K_SECONDS(5)
-#define FORWARD_WORK_DELAY	K_SECONDS(1)
-
-struct keyboard_event_item {
+struct enqueued_event_item {
 	sys_snode_t node;
-	struct hid_keyboard_event *evt;
-};
-
-struct consumer_ctrl_event_item {
-	sys_snode_t node;
-	struct hid_consumer_ctrl_event *evt;
+	struct hid_report_event *event;
 };
 
 struct hids_subscriber {
 	struct bt_gatt_hids_c hidc;
 	u16_t pid;
-	u32_t timestamp;
 };
-
-static struct k_delayed_work config_fwd_timeout;
 
 static struct hids_subscriber subscribers[CONFIG_BT_MAX_CONN];
 static const void *usb_id;
-static atomic_t usb_ready;
+static bool usb_ready;
 static bool usb_busy;
 static bool forward_pending;
 static void *channel_id;
 
-static struct hid_mouse_event *next_mouse_event;
-static sys_slist_t keyboard_event_list;
-static sys_slist_t consumer_ctrl_event_list;
+static sys_slist_t enqueued_event_list;
+static size_t enqueued_event_count;
 
 static struct k_spinlock lock;
 
-static int change_connection_latency(struct hids_subscriber *subscriber, u16_t latency)
+
+static void enqueue_hid_event(struct hid_report_event *event)
 {
-	__ASSERT_NO_MSG(subscriber != NULL);
+	struct enqueued_event_item *item;
 
-	struct bt_conn *conn = bt_gatt_hids_c_conn(&subscriber->hidc);
-
-	if (!conn) {
-		LOG_WRN("There is no connection for a HIDS subscriber: %"
-			PRIx16, subscriber->pid);
-		return -ENXIO;
-	}
-
-	struct bt_conn_info info;
-	int err = bt_conn_get_info(conn, &info);
-
-	if (err) {
-		LOG_WRN("Cannot get conn info (%d)", err);
-		return err;
-	}
-
-	__ASSERT_NO_MSG(info.role == BT_CONN_ROLE_MASTER);
-
-	const struct bt_le_conn_param param = {
-		.interval_min = info.le.interval,
-		.interval_max = info.le.interval,
-		.latency = latency,
-		.timeout = info.le.timeout
-	};
-
-	err = bt_conn_le_param_update(conn, &param);
-	if (err == -EALREADY) {
-		LOG_WRN("Slave latency already changed");
-		err = 0;
-	} else if (err) {
-		LOG_WRN("Cannot update parameters (%d)", err);
+	if (enqueued_event_count < MAX_ENQUEUED_ITEMS) {
+		item = k_malloc(sizeof(*item));
+		enqueued_event_count++;
 	} else {
-		LOG_INF("BLE latency changed to: %"PRIu16, latency);
+		LOG_WRN("Enqueue dropped the oldest event");
+		item = CONTAINER_OF(sys_slist_get(&enqueued_event_list),
+				    __typeof__(*item),
+				    node);
+		k_free(item->event);
 	}
 
-	return err;
-}
-
-static void forward_config_timeout(struct k_work *work_desc)
-{
-	__ASSERT_NO_MSG(work_desc != NULL);
-
-	u32_t cur_time = k_uptime_get_32();
-	bool forward_is_pending = false;
-	int err = 0;
-
-	for (size_t idx = 0; idx < ARRAY_SIZE(subscribers); idx++) {
-		if ((subscribers[idx].timestamp != 0) &&
-		    (bt_gatt_hids_c_assign_check(&subscribers[idx].hidc))) {
-			if ((cur_time - subscribers[idx].timestamp) > FORWARD_TIMEOUT) {
-				LOG_WRN("Configuration forward timed out");
-
-				err = change_connection_latency(&subscribers[idx], LATENCY_DEFAULT);
-				if (err) {
-					LOG_WRN("Can't set latency to default");
-					continue;
-				}
-
-				subscribers[idx].timestamp = 0;
-			} else {
-				forward_is_pending = true;
-			}
-		}
-	}
-
-	if (forward_is_pending) {
-		k_delayed_work_submit(&config_fwd_timeout, FORWARD_WORK_DELAY);
+	if (!item) {
+		LOG_ERR("OOM error");
+		module_set_state(MODULE_STATE_ERROR);
+	} else {
+		item->event = event;
+		sys_slist_append(&enqueued_event_list, &item->node);
 	}
 }
 
-static void process_mouse_report(const u8_t *data)
+static void forward_hid_report(u8_t report_id, const u8_t *data, size_t size)
 {
-	u8_t button_bm = data[0];
-	s16_t wheel = (s8_t)data[1];
-
-	u8_t x_buff[2] = {data[2], data[3] & 0x0F};
-	u8_t y_buff[2] = {(data[3] >> 4) | ((data[4] << 4) & 0xF0), data[4] >> 4};
-
-	u16_t x = sys_get_le16(x_buff);
-	u16_t y = sys_get_le16(y_buff);
-
-	if (x > MOUSE_REPORT_XY_MAX) {
-		x |= 0xF000;
-	}
-	if (y > MOUSE_REPORT_XY_MAX) {
-		y |= 0xF000;
-	}
-
-	struct hid_mouse_event *event;
+	struct hid_report_event *event = new_hid_report_event(size + sizeof(report_id));
 
 	k_spinlock_key_t key = k_spin_lock(&lock);
 
-	if (next_mouse_event) {
-		__ASSERT_NO_MSG(usb_busy);
-
-		LOG_WRN("Event override");
-		event = next_mouse_event;
-	} else {
-		event = new_hid_mouse_event();
+	if (!usb_ready) {
+		k_spin_unlock(&lock, key);
+		k_free(event);
+		return;
 	}
 
 	event->subscriber = usb_id;
 
-	event->button_bm = button_bm;
-	event->wheel     = wheel;
-
-	event->dx = x;
-	event->dy = y;
+	/* Forward report as is adding report id on the front. */
+	event->dyndata.data[0] = report_id;
+	memcpy(&event->dyndata.data[1], data, size);
 
 	if (!usb_busy) {
 		EVENT_SUBMIT(event);
 		usb_busy = true;
 	} else {
-		next_mouse_event = event;
+		enqueue_hid_event(event);
 	}
 
-	k_spin_unlock(&lock, key);
-}
-
-static void process_keyboard_report(const u8_t *data)
-{
-	struct hid_keyboard_event *event = new_hid_keyboard_event();
-
-	event->subscriber = usb_id;
-	event->modifier_bm = data[0];
-	memcpy(event->keys, &data[2], ARRAY_SIZE(event->keys));
-
-	k_spinlock_key_t key = k_spin_lock(&lock);
-
-	if (!usb_busy) {
-		EVENT_SUBMIT(event);
-		usb_busy = true;
-	} else {
-		struct keyboard_event_item *evt_item = k_malloc(sizeof(*evt_item));
-
-		if (!evt_item) {
-			LOG_ERR("OOM error");
-			k_panic();
-		}
-
-		evt_item->evt = event;
-		sys_slist_append(&keyboard_event_list, &evt_item->node);
-	}
-	k_spin_unlock(&lock, key);
-}
-
-static void process_consumer_ctrl_report(const u8_t *data)
-{
-	struct hid_consumer_ctrl_event *event = new_hid_consumer_ctrl_event();
-
-	event->subscriber = usb_id;
-	event->usage = sys_get_le16(data);
-
-	k_spinlock_key_t key = k_spin_lock(&lock);
-
-	if (!usb_busy) {
-		EVENT_SUBMIT(event);
-		usb_busy = true;
-	} else {
-		struct consumer_ctrl_event_item *evt_item =
-			k_malloc(sizeof(*evt_item));
-
-		if (!evt_item) {
-			LOG_ERR("OOM error");
-			k_panic();
-		}
-
-		evt_item->evt = event;
-		sys_slist_append(&consumer_ctrl_event_list, &evt_item->node);
-	}
 	k_spin_unlock(&lock, key);
 }
 
@@ -248,26 +110,17 @@ static u8_t hidc_read(struct bt_gatt_hids_c *hids_c,
 		return BT_GATT_ITER_STOP;
 	}
 
-	if (err || !atomic_get(&usb_ready)) {
+	if (err) {
 		return BT_GATT_ITER_CONTINUE;
 	}
 
-	switch (bt_gatt_hids_c_rep_id(rep)) {
-	case REPORT_ID_MOUSE:
-		process_mouse_report(data);
-		break;
+	u8_t report_id = bt_gatt_hids_c_rep_id(rep);
+	size_t size = bt_gatt_hids_c_rep_size(rep);
 
-	case REPORT_ID_KEYBOARD_KEYS:
-		process_keyboard_report(data);
-		break;
+	__ASSERT_NO_MSG((report_id != REPORT_ID_RESERVED) &&
+			(report_id < REPORT_ID_COUNT));
 
-	case REPORT_ID_CONSUMER_CTRL:
-		process_consumer_ctrl_report(data);
-		break;
-
-	default:
-		__ASSERT_NO_MSG(false);
-	}
+	forward_hid_report(report_id, data, size);
 
 	return BT_GATT_ITER_CONTINUE;
 }
@@ -317,9 +170,7 @@ static void init(void)
 	for (size_t i = 0; i < ARRAY_SIZE(subscribers); i++) {
 		bt_gatt_hids_c_init(&subscribers[i].hidc, &params);
 	}
-	sys_slist_init(&keyboard_event_list);
-
-	k_delayed_work_init(&config_fwd_timeout, forward_config_timeout);
+	sys_slist_init(&enqueued_event_list);
 }
 
 static int register_subscriber(struct bt_gatt_dm *dm, u16_t pid)
@@ -414,36 +265,13 @@ static struct hids_subscriber *find_subscriber_hidc(u16_t pid)
 	return NULL;
 }
 
-static int switch_to_low_latency(struct hids_subscriber *subscriber)
-{
-	int err = 0;
-
-	if (IS_ENABLED(CONFIG_BT_LL_NRFXLIB)) {
-		if (subscriber->timestamp == 0) {
-			LOG_INF("DFU next forward");
-			err = change_connection_latency(subscriber, LATENCY_LOW);
-			if (err) {
-				LOG_WRN("Error while change of connection parameters");
-				return err;
-			}
-		}
-		subscriber->timestamp = k_uptime_get_32();
-
-		if (!k_delayed_work_remaining_get(&config_fwd_timeout)) {
-			k_delayed_work_submit(&config_fwd_timeout,
-					      FORWARD_WORK_DELAY);
-		}
-	}
-
-	return err;
-}
-
 static void handle_config_forward(const struct config_forward_event *event)
 {
 	struct hids_subscriber *subscriber = find_subscriber_hidc(event->recipient);
 
 	if (!subscriber) {
 		LOG_INF("Recipent %02" PRIx16 "not found", event->recipient);
+		notify_config_forwarded(CONFIG_STATUS_DISCONNECTED_ERROR);
 		return;
 	}
 
@@ -458,10 +286,20 @@ static void handle_config_forward(const struct config_forward_event *event)
 		return;
 	}
 
-	struct bt_gatt_hids_c_rep_info *config_rep =
-		bt_gatt_hids_c_rep_find(recipient_hidc,
-					BT_GATT_HIDS_REPORT_TYPE_FEATURE,
-					REPORT_ID_USER_CONFIG);
+	bool has_out_report = false;
+	struct bt_gatt_hids_c_rep_info *config_rep;
+
+	config_rep = bt_gatt_hids_c_rep_find(recipient_hidc,
+					     BT_GATT_HIDS_REPORT_TYPE_OUTPUT,
+					     REPORT_ID_USER_CONFIG_OUT);
+
+	if (!config_rep) {
+		config_rep = bt_gatt_hids_c_rep_find(recipient_hidc,
+					     BT_GATT_HIDS_REPORT_TYPE_FEATURE,
+					     REPORT_ID_USER_CONFIG);
+	} else {
+		has_out_report = true;
+	}
 
 	if (!config_rep) {
 		LOG_ERR("Feature report not found");
@@ -471,6 +309,7 @@ static void handle_config_forward(const struct config_forward_event *event)
 
 	if (event->dyndata.size > UCHAR_MAX) {
 		LOG_WRN("Event data too big");
+		notify_config_forwarded(CONFIG_STATUS_WRITE_ERROR);
 		return;
 	}
 
@@ -489,26 +328,33 @@ static void handle_config_forward(const struct config_forward_event *event)
 	frame.event_data_len = event->dyndata.size;
 	frame.event_data = (u8_t *)event->dyndata.data;
 
-	int err = switch_to_low_latency(subscriber);
-
-	if (err) {
-		notify_config_forwarded(CONFIG_STATUS_WRITE_ERROR);
-		return;
-	}
-
 	int pos = config_channel_report_fill(report, sizeof(report), &frame,
 					     false);
 
 	if (pos < 0) {
 		LOG_WRN("Could not set report");
+		notify_config_forwarded(CONFIG_STATUS_WRITE_ERROR);
 		return;
 	}
 
-	err = bt_gatt_hids_c_rep_write(recipient_hidc,
-				       config_rep,
-				       hidc_write_cb,
-				       report,
-				       sizeof(report));
+	notify_config_forwarded(CONFIG_STATUS_PENDING);
+
+	int err;
+
+	if (has_out_report) {
+		err = bt_gatt_hids_c_rep_write_wo_rsp(recipient_hidc,
+						      config_rep,
+						      report,
+						      sizeof(report),
+						      hidc_write_cb);
+	} else {
+		err = bt_gatt_hids_c_rep_write(recipient_hidc,
+					       config_rep,
+					       hidc_write_cb,
+					       report,
+					       sizeof(report));
+	}
+
 	if (err) {
 		LOG_ERR("Writing report failed, err:%d", err);
 		notify_config_forwarded(CONFIG_STATUS_WRITE_ERROR);
@@ -524,6 +370,7 @@ static void handle_config_forward_get(const struct config_forward_get_event *eve
 
 	if (!subscriber) {
 		LOG_INF("Recipent %02" PRIx16 "not found", event->recipient);
+		notify_config_forwarded(CONFIG_STATUS_DISCONNECTED_ERROR);
 		return;
 	}
 
@@ -531,15 +378,8 @@ static void handle_config_forward_get(const struct config_forward_get_event *eve
 
 	__ASSERT_NO_MSG(recipient_hidc != NULL);
 
-	int err = switch_to_low_latency(subscriber);
-
-	if (err) {
-		notify_config_forwarded(CONFIG_STATUS_WRITE_ERROR);
-		return;
-	}
-
 	if (forward_pending) {
-		LOG_DBG("GATT read already pending");
+		LOG_DBG("GATT operation already pending");
 		return;
 	}
 
@@ -565,9 +405,9 @@ static void handle_config_forward_get(const struct config_forward_get_event *eve
 
 	channel_id = event->channel_id;
 
-	err = bt_gatt_hids_c_rep_read(recipient_hidc,
-				      config_rep,
-				      hidc_read_cfg);
+	int err = bt_gatt_hids_c_rep_read(recipient_hidc,
+					  config_rep,
+					  hidc_read_cfg);
 
 	if (err) {
 		LOG_ERR("Reading report failed, err:%d", err);
@@ -579,76 +419,82 @@ static void disconnect_subscriber(struct hids_subscriber *subscriber)
 {
 	LOG_INF("HID device disconnected");
 
-	/* Release all pressed keys. */
-	u8_t empty_data[MAX(REPORT_SIZE_CONSUMER_CTRL,
-			MAX(REPORT_SIZE_MOUSE,
-				REPORT_SIZE_KEYBOARD_KEYS))] = {0};
 	struct bt_gatt_hids_c_rep_info *rep = NULL;
 
 	while (NULL != (rep = bt_gatt_hids_c_rep_next(&subscriber->hidc, rep))) {
-		if (bt_gatt_hids_c_rep_type(rep) ==
-				BT_GATT_HIDS_REPORT_TYPE_INPUT) {
+		if (bt_gatt_hids_c_rep_type(rep) == BT_GATT_HIDS_REPORT_TYPE_INPUT) {
+			u8_t report_id = bt_gatt_hids_c_rep_id(rep);
+			size_t size = bt_gatt_hids_c_rep_size(rep);
 
-			switch (bt_gatt_hids_c_rep_id(rep)) {
-			case REPORT_ID_MOUSE:
-				process_mouse_report(empty_data);
-				break;
+			__ASSERT_NO_MSG((report_id != REPORT_ID_RESERVED) &&
+					(report_id < REPORT_ID_COUNT));
 
-			case REPORT_ID_KEYBOARD_KEYS:
-				process_keyboard_report(empty_data);
-				break;
+			/* Release all pressed keys. */
+			u8_t empty_data[size];
 
-			case REPORT_ID_CONSUMER_CTRL:
-				process_consumer_ctrl_report(empty_data);
-				break;
+			memset(empty_data, 0, sizeof(empty_data));
 
-			default:
-				/* Unsupported report ID. */
-				__ASSERT_NO_MSG(false);
-				break;
-			}
+			forward_hid_report(report_id, empty_data, size);
 		}
 	}
 
 	bt_gatt_hids_c_release(&subscriber->hidc);
 	subscriber->pid = 0;
-	subscriber->timestamp = 0;
+}
+
+static void clear_state(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&lock);
+
+	usb_ready = false;
+	usb_id = NULL;
+	usb_busy = false;
+
+	/* Clear all the reports. */
+	while (!sys_slist_is_empty(&enqueued_event_list)) {
+		struct enqueued_event_item *item;;
+
+		item = CONTAINER_OF(sys_slist_get(&enqueued_event_list),
+				     __typeof__(*item),
+				    node);
+		enqueued_event_count--;
+
+		k_spin_unlock(&lock, key);
+
+		k_free(item->event);
+		k_free(item);
+
+		key = k_spin_lock(&lock);
+	}
+
+	__ASSERT_NO_MSG(enqueued_event_count == 0);
+
+	k_spin_unlock(&lock, key);
 }
 
 static bool event_handler(const struct event_header *eh)
 {
 	if (is_hid_report_sent_event(eh)) {
-		struct keyboard_event_item *next_item_kbd = NULL;
-		struct consumer_ctrl_event_item *next_item_c_ctrl = NULL;
 		k_spinlock_key_t key = k_spin_lock(&lock);
 
-		if (!sys_slist_is_empty(&keyboard_event_list)) {
-			sys_snode_t *kbd_event_node =
-				sys_slist_get(&keyboard_event_list);
+		__ASSERT_NO_MSG(usb_ready);
 
-			next_item_kbd = CONTAINER_OF(kbd_event_node,
-						     struct keyboard_event_item,
-						     node);
+		struct enqueued_event_item *item = NULL;
 
-			EVENT_SUBMIT(next_item_kbd->evt);
-		} else if (!sys_slist_is_empty(&consumer_ctrl_event_list)) {
-			sys_snode_t *c_ctrl_event_node =
-				sys_slist_get(&consumer_ctrl_event_list);
+		if (!sys_slist_is_empty(&enqueued_event_list)) {
+			item = CONTAINER_OF(sys_slist_get(&enqueued_event_list),
+					    __typeof__(*item),
+					    node);
+			enqueued_event_count--;
 
-			next_item_c_ctrl = CONTAINER_OF(c_ctrl_event_node,
-						struct consumer_ctrl_event_item,
-						node);
-
-			EVENT_SUBMIT(next_item_c_ctrl->evt);
-		} else if (next_mouse_event) {
-			EVENT_SUBMIT(next_mouse_event);
-			next_mouse_event = NULL;
+			EVENT_SUBMIT(item->event);
 		} else {
 			usb_busy = false;
 		}
+
 		k_spin_unlock(&lock, key);
-		k_free(next_item_kbd);
-		k_free(next_item_c_ctrl);
+
+		k_free(item);
 
 		return false;
 	}
@@ -685,7 +531,13 @@ static bool event_handler(const struct event_header *eh)
 			cast_hid_report_subscription_event(eh);
 
 		if (event->subscriber == usb_id) {
-			atomic_set(&usb_ready, event->enabled);
+			if (event->enabled) {
+				k_spinlock_key_t key = k_spin_lock(&lock);
+				usb_ready = true;
+				k_spin_unlock(&lock, key);
+			} else {
+				clear_state();
+			}
 		}
 
 		return false;
@@ -712,12 +564,11 @@ static bool event_handler(const struct event_header *eh)
 			cast_usb_state_event(eh);
 
 		switch (event->state) {
-		case USB_STATE_POWERED:
+		case USB_STATE_ACTIVE:
 			usb_id = event->id;
 			break;
 		case USB_STATE_DISCONNECTED:
-			usb_id = NULL;
-			atomic_set(&usb_ready, false);
+			clear_state();
 			break;
 		default:
 			/* Ignore */

@@ -6,16 +6,17 @@
 
 #include <zephyr.h>
 #include <device.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <nrfx.h>
 #include <string.h>
 #include <hal/nrf_power.h>
 #include <power/reboot.h>
+#include <usb/usb_device.h>
 
 /* Overriding weak function to set iSerial runtime. */
 u8_t *usb_update_sn_string_descriptor(void)
 {
-	static u8_t buf[] = "PCA20035_12PLACEHLDRS";
+	static u8_t buf[] = "THINGY91_12PLACEHLDRS";
 
 	snprintk(&buf[9], 13, "%04X%08X",
 		(uint32_t)(NRF_FICR->DEVICEADDR[1] & 0x0000FFFF)|0x0000C000,
@@ -167,7 +168,7 @@ void power_thread(void)
 		if (!nrf_power_usbregstatus_vbusdet_get(NRF_POWER)) {
 			nrf_power_system_off(NRF_POWER);
 		}
-		k_sleep(100);
+		k_sleep(K_MSEC(100));
 	}
 }
 
@@ -232,6 +233,12 @@ void main(void)
 	uart_irq_callback_user_data_set(uart_1_dev, uart_interrupt_handler,
 		uart_1_sd);
 
+	ret = usb_enable(NULL);
+	if (ret != 0) {
+		printk("Failed to enable USB\n");
+		return;
+	}
+
 	uart_irq_rx_enable(usb_0_dev);
 	uart_irq_rx_enable(usb_1_dev);
 	uart_irq_rx_enable(uart_0_dev);
@@ -281,4 +288,4 @@ void main(void)
 }
 
 K_THREAD_DEFINE(power_thread_id, POWER_THREAD_STACKSIZE, power_thread,
-		NULL, NULL, NULL, POWER_THREAD_PRIORITY, 0, K_NO_WAIT);
+		NULL, NULL, NULL, POWER_THREAD_PRIORITY, 0, 0);

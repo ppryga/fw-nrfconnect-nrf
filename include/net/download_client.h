@@ -60,20 +60,23 @@ enum download_client_evt_id {
 	DOWNLOAD_CLIENT_EVT_DONE,
 };
 
+struct download_fragment {
+	const void *buf;
+	size_t len;
+};
+
 /**
  * @brief Download client event.
  */
 struct download_client_evt {
 	/** Event ID. */
 	enum download_client_evt_id id;
+
 	union {
 		/** Error cause. */
 		int error;
 		/** Fragment data. */
-		struct fragment {
-			const void *buf;
-			size_t len;
-		} fragment;
+		struct download_fragment fragment;
 	};
 };
 
@@ -81,10 +84,17 @@ struct download_client_evt {
  * @brief Download client configuration options.
  */
 struct download_client_cfg {
-	/** TLS security tag. If -1, TLS is disabled. */
+	/** IP port.
+	 *  Pass zero to use default, or non-zero to override.
+	 */
+	u16_t port;
+	/** TLS security tag.
+	 *  Pass -1 to disable TLS.
+	 */
 	int sec_tag;
 	/** Access point name identifying a packet data network.
-	 * Must be a null-terminated string or NULL to use the default APN.
+	 *  Pass a null-terminated string with the APN
+	 *  or NULL to use the default APN.
 	 */
 	const char *apn;
 };

@@ -165,7 +165,8 @@ static u8_t periodic_read_process(struct bt_conn *conn, u8_t err,
 	if (atomic_test_bit(&bas_c->periodic_read.process,
 			    BAS_PERIODIC_READ_PROC_BIT)) {
 		k_delayed_work_submit(&bas_c->periodic_read.read_work,
-				      atomic_get(&bas_c->periodic_read.interval));
+				      K_MSEC(atomic_get(
+					&bas_c->periodic_read.interval)));
 	}
 
 	return BT_GATT_ITER_STOP;
@@ -237,12 +238,12 @@ void bt_gatt_bas_c_init(struct bt_gatt_bas_c *bas_c)
 int bt_gatt_bas_c_handles_assign(struct bt_gatt_dm *dm,
 				 struct bt_gatt_bas_c *bas_c)
 {
-	const struct bt_gatt_attr *gatt_service_attr =
+	const struct bt_gatt_dm_attr *gatt_service_attr =
 			bt_gatt_dm_service_get(dm);
 	const struct bt_gatt_service_val *gatt_service =
 			bt_gatt_dm_attr_service_val(gatt_service_attr);
-	const struct bt_gatt_attr *gatt_chrc;
-	const struct bt_gatt_attr *gatt_desc;
+	const struct bt_gatt_dm_attr *gatt_chrc;
+	const struct bt_gatt_dm_attr *gatt_desc;
 	const struct bt_gatt_chrc *chrc_val;
 
 	if (bt_uuid_cmp(gatt_service->uuid, BT_UUID_BAS)) {
@@ -406,7 +407,7 @@ int bt_gatt_bas_c_periodic_read_start(struct bt_gatt_bas_c *bas_c,
 	if (!atomic_test_and_set_bit(&bas_c->periodic_read.process,
 				     BAS_PERIODIC_READ_PROC_BIT)) {
 		k_delayed_work_submit(&bas_c->periodic_read.read_work,
-				      interval);
+				      K_MSEC(interval));
 	}
 
 	return 0;

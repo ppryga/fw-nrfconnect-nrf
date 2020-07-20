@@ -7,17 +7,10 @@
 //
 
 @Library("CI_LIB") _
-
 HashMap CI_STATE = lib_State.getConfig(JOB_NAME)
-def TestExecutionList = [:]
+properties(lib_State.getTriggers())
 
-properties([
-  pipelineTriggers([
-    parameterizedCron((JOB_NAME =~ /latest\/night\/.*\/master/).find() ? CI_STATE.CFG.CRON.NIGHTLY : ''),
-    parameterizedCron((JOB_NAME =~ /latest\/week\/.*\/master/).find() ? CI_STATE.CFG.CRON.WEEKLY : ''),
-  ]),
-  ( JOB_NAME.contains('sub/') ? disableResume() : disableResume() ) // allowing ConcurrentBuilds at the moment  // disableConcurrentBuilds()
-])
+def TestExecutionList = [:]
 
 pipeline {
 
@@ -25,7 +18,7 @@ pipeline {
        booleanParam(name: 'RUN_DOWNSTREAM', description: 'if false skip downstream jobs', defaultValue: true)
        booleanParam(name: 'RUN_TESTS', description: 'if false skip testing', defaultValue: true)
        booleanParam(name: 'RUN_BUILD', description: 'if false skip building', defaultValue: true)
-       string(name: 'PLATFORMS', description: 'Default Platforms to test', defaultValue: 'nrf9160_pca10090 nrf52_pca10040 nrf52840_pca10056')
+       string(name: 'PLATFORMS', description: 'Default Platforms to test', defaultValue: 'nrf9160dk_nrf9160 nrf52dk_nrf52832 nrf52840dk_nrf52840 nrf5340pdk_nrf5340_cpuapp')
        string(name: 'jsonstr_CI_STATE', description: 'Default State if no upstream job', defaultValue: CI_STATE.CFG.INPUT_STATE_STR)
        choice(name: 'CRON', choices: ['COMMIT', 'NIGHTLY', 'WEEKLY'], description: 'Cron Test Phase')
   }
@@ -39,15 +32,17 @@ pipeline {
   environment {
       GH_TOKEN = credentials('nordicbuilder-compliance-token') // This token is used to by check_compliance to comment on PRs and use checks
       GH_USERNAME = "NordicBuilder"
-      COMPLIANCE_ARGS = "-r NordicPlayground/fw-nrfconnect-nrf"
+      COMPLIANCE_ARGS = "-r nrfconnect/sdk-nrf"
       ARCH = "-a arm"
       SANITYCHECK_OPTIONS_COMMON = '''--ninja \
                                       --board-root nrf/boards \
                                       --board-root zephyr/boards \
                                       --testcase-root nrf/samples \
                                       --testcase-root nrf/applications \
+                                      --testcase-root nrf/tests \
                                       --inline-logs --disable-unrecognized-section-test \
                                       --tag ci_build \
+                                      --retry-failed 7 \
                                    '''
   }
 
@@ -77,7 +72,7 @@ pipeline {
                   def BUILD_TYPE = lib_Main.getBuildType(CI_STATE.SELF)
                   if (BUILD_TYPE == "PR") {
                     COMMIT_RANGE = "$CI_STATE.SELF.MERGE_BASE..$CI_STATE.SELF.REPORT_SHA"
-                    COMPLIANCE_ARGS = "$COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g"
+                    COMPLIANCE_ARGS = "$COMPLIANCE_ARGS $CI_STATE.SELF.CUSTOM_COMPLIANCE_ARGS -p $CHANGE_ID -S $CI_STATE.SELF.REPORT_SHA -g"
                     println "Building a PR [$CHANGE_ID]: $COMMIT_RANGE"
                   }
                   else if (BUILD_TYPE == "TAG") {
@@ -98,6 +93,7 @@ pipeline {
                     sh """ \
                       (source ../zephyr/zephyr-env.sh && \
                       pip install --user -r ../tools/ci-tools/requirements.txt && \
+                      pip install --user pylint && \
                       ../tools/ci-tools/scripts/check_compliance.py $COMPLIANCE_ARGS --commits $COMMIT_RANGE) \
                     """
                   }
@@ -146,8 +142,9 @@ pipeline {
 
     }}}
 
-    stage('Exectuion') { steps { script {
+    stage('Execution') { steps { script {
       parallel TestExecutionList
+      lib_Status.set("${currentBuild.currentResult}",  'NRF', CI_STATE)
     }}}
 
     stage('Trigger Downstream Jobs') {
@@ -164,29 +161,16 @@ pipeline {
   }
   post {
     // This is the order that the methods are run. {always->success/abort/failure/unstable->cleanup}
-    always {
-      echo "always"
-    }
-    success {
-      echo "success"
-      script { lib_Status.set("SUCCESS", 'NRF', CI_STATE) }
-    }
-    aborted {
-      echo "aborted"
-      script { lib_Status.set("ABORTED", 'NRF', CI_STATE) }
-    }
-    unstable {
-      echo "unstable"
-      script { lib_Status.set("FAILURE", 'NRF', CI_STATE) }
-    }
-    failure {
-      echo "failure"
-      script { lib_Status.set("FAILURE", 'NRF', CI_STATE) }
-    }
-    cleanup {
-        echo "cleanup"
-        cleanWs()
-    }
+    always {   script { echo "always"; lib_Status.set( "${currentBuild.currentResult}" , 'FULL_CI', CI_STATE) } }
+
+    /* uncomment if logic is needed
+    success  { }
+    aborted  { }
+    unstable { }
+    failure  { }
+    */
+
+    cleanup  { script { echo "cleanup"; cleanWs disableDeferredWipeout: true, deleteDirs: true } }
   }
 }
 
@@ -211,10 +195,9 @@ def generateParallelStage(platform, compiler, JOB_NAME, CI_STATE, SANITYCHECK_OP
           FULL_SANITYCHECK_CMD = """
             export ZEPHYR_TOOLCHAIN_VARIANT='$compiler' && \
             source zephyr/zephyr-env.sh && \
+            pip install --user -r nrf/scripts/requirements-ci.txt && \
             export && \
-            $SANITYCHECK_CMD || \
-            (sleep 10; $SANITYCHECK_CMD --only-failed --outdir=out-2nd-pass) || \
-            (sleep 10; $SANITYCHECK_CMD --only-failed --outdir=out-3rd-pass)
+            $SANITYCHECK_CMD
           """
           println "FULL_SANITYCHECK_CMD = " + FULL_SANITYCHECK_CMD
           sh FULL_SANITYCHECK_CMD

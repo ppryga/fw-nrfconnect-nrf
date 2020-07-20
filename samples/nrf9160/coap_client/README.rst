@@ -26,12 +26,15 @@ Other resources can be configured using the Kconfig option ``CONFIG_COAP_RESOURC
 Requirements
 ************
 
-* The following development board:
+The sample supports the following development kit:
 
-  * |nRF9160DK|
+.. include:: /includes/boardname_tables/sample_boardnames.txt
+   :start-after: set5_start
+   :end-before: set5_end
 
-* .. include:: /includes/spm.txt
-* A public CoAP server IP address or URL available on the internet
+The sample also requires a public CoAP server IP address or URL available on the internet.
+
+.. include:: /includes/spm.txt
 
 Building and running
 ********************
@@ -70,9 +73,9 @@ The sample displays the data in the following format:
 Instead of displaying every single CoAP frame content, the sample displays only the essential data.
 For the above sample output, the information displayed on the terminal conveys the following:
 
-   * ``code:0x45`` -  CoAP response code (2.05 - Content), which is constant across responses
-   * ``token 0x9772`` - CoAP token, which is unique per request/response pair
-   * ``payload: 15:39:40`` - the actual message payload (current time in UTC format) from the resource that is queried in this sample
+* ``code:0x45`` -  CoAP response code (2.05 - Content), which is constant across responses
+* ``token 0x9772`` - CoAP token, which is unique per request/response pair
+* ``payload: 15:39:40`` - the actual message payload (current time in UTC format) from the resource that is queried in this sample
 
 
 Dependencies
@@ -87,7 +90,7 @@ From nrfxlib
   * :ref:`nrfxlib:bsdlib`
 
 From Zephyr
-  * :ref:`CoAP <zephyr:networking_reference>`
+  * :ref:`CoAP <zephyr:networking_api>`
 
 In addition, it uses the following samples:
 

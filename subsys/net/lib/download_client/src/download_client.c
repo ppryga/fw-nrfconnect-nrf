@@ -23,17 +23,17 @@ LOG_MODULE_REGISTER(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 	"Range: bytes=%u-%u\r\n"                                               \
 	"\r\n"
 
-BUILD_ASSERT_MSG(CONFIG_DOWNLOAD_CLIENT_MAX_FRAGMENT_SIZE <=
+BUILD_ASSERT(CONFIG_DOWNLOAD_CLIENT_MAX_FRAGMENT_SIZE <=
 		 CONFIG_DOWNLOAD_CLIENT_MAX_RESPONSE_SIZE,
 		 "The response buffer must accommodate for a full non-TLS fragment");
 
-BUILD_ASSERT_MSG(CONFIG_DOWNLOAD_CLIENT_MAX_TLS_FRAGMENT_SIZE <=
+BUILD_ASSERT(CONFIG_DOWNLOAD_CLIENT_MAX_TLS_FRAGMENT_SIZE <=
 		 CONFIG_DOWNLOAD_CLIENT_MAX_RESPONSE_SIZE,
 		 "The response buffer must accommodate for a full TLS fragment");
 
-#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE)
-BUILD_ASSERT_MSG(IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_LOG_HEADERS) ?
-			 CONFIG_LOG_BUFFER_SIZE >= 2048 : 1,
+#if defined(CONFIG_LOG) && !defined(CONFIG_LOG_IMMEDIATE)\
+			&& defined(CONFIG_DOWNLOAD_CLIENT_LOG_HEADERS)
+BUILD_ASSERT(CONFIG_LOG_BUFFER_SIZE >= 2048,
 		 "Please increase log buffer sizer");
 #endif
 
@@ -41,7 +41,7 @@ static int socket_timeout_set(int fd)
 {
 	int err;
 
-	if (CONFIG_DOWNLOAD_CLIENT_SOCK_TIMEOUT_MS == K_FOREVER) {
+	if (CONFIG_DOWNLOAD_CLIENT_SOCK_TIMEOUT_MS == SYS_FOREVER_MS) {
 		return 0;
 	}
 
@@ -132,13 +132,13 @@ static int resolve_and_connect(int family, const char *host,
 
 	/* Set up port and protocol */
 	if (cfg->sec_tag == -1) {
-		/* HTTP, port 80 */
 		proto = IPPROTO_TCP;
-		port = htons(80);
+		port = (cfg->port != 0) ? htons(cfg->port) :
+					  htons(80); /* HTTP, port 80 */
 	} else {
-		/* HTTPS, port 443 */
 		proto = IPPROTO_TLS_1_2;
-		port = htons(443);
+		port = (cfg->port != 0) ? htons(cfg->port) :
+					  htons(443); /* HTTPS, port 443 */
 	}
 
 	/* Lookup host */
@@ -147,7 +147,13 @@ static int resolve_and_connect(int family, const char *host,
 		.ai_socktype = SOCK_STREAM,
 		.ai_protocol = proto,
 		/* Either a valid, NULL-terminated access point name or NULL. */
-		.ai_canonname = (char *)cfg->apn
+		.ai_next =  cfg->apn ?
+			&(struct addrinfo) {
+				.ai_family    = AF_LTE,
+				.ai_socktype  = SOCK_MGMT,
+				.ai_protocol  = NPROTO_PDN,
+				.ai_canonname = (char *)cfg->apn
+			} : NULL,
 	};
 
 	err = getaddrinfo(host, NULL, &hints, &info);

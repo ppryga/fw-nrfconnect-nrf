@@ -5,8 +5,8 @@
  */
 
 #include <device.h>
-#include <sensor.h>
-#include <i2c.h>
+#include <drivers/sensor.h>
+#include <drivers/i2c.h>
 #include <sys/__assert.h>
 #include <sys/byteorder.h>
 #include <init.h>
@@ -20,6 +20,8 @@ static struct k_delayed_work bh1749_init_work;
 static struct device *bh1749_dev;
 
 LOG_MODULE_REGISTER(BH1749, CONFIG_SENSOR_LOG_LEVEL);
+
+#define DT_DRV_COMPAT rohm_bh1749
 
 static const s32_t async_init_delay[ASYNC_INIT_STEP_COUNT] = {
 	[ASYNC_INIT_STEP_RESET_CHECK] = 2,
@@ -56,7 +58,7 @@ static int bh1749_sample_fetch(struct device *dev, enum sensor_channel chan)
 
 	LOG_DBG("Fetching sample...\n");
 
-	if (i2c_reg_read_byte(data->i2c, DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+	if (i2c_reg_read_byte(data->i2c, DT_REG_ADDR(DT_DRV_INST(0)),
 			      BH1749_MODE_CONTROL2, &status)) {
 		LOG_ERR("Could not read status register CONTROL2");
 		return -EIO;
@@ -69,7 +71,7 @@ static int bh1749_sample_fetch(struct device *dev, enum sensor_channel chan)
 		return -EIO;
 	}
 
-	if (i2c_burst_read(data->i2c, DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+	if (i2c_burst_read(data->i2c, DT_REG_ADDR(DT_DRV_INST(0)),
 			   BH1749_RED_DATA_LSB,
 			   (u8_t *)data->sample_rgb_ir,
 			   BH1749_SAMPLES_TO_FETCH * sizeof(u16_t))) {
@@ -82,14 +84,15 @@ static int bh1749_sample_fetch(struct device *dev, enum sensor_channel chan)
 		u8_t dummy;
 
 		if (i2c_reg_read_byte(data->i2c,
-				      DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+				      DT_REG_ADDR(DT_DRV_INST(0)),
 				      BH1749_INTERRUPT, &dummy)) {
 			LOG_ERR("Could not disable sensor interrupt.");
 			return -EIO;
 		}
 
-		if (gpio_pin_enable_callback(data->gpio,
-					     DT_INST_0_ROHM_BH1749_INT_GPIOS_PIN)) {
+		if (gpio_pin_interrupt_configure(data->gpio,
+					DT_INST_GPIO_PIN(0, int_gpios),
+					GPIO_INT_LEVEL_LOW)) {
 			LOG_ERR("Could not enable pin callback");
 			return -EIO;
 		}
@@ -141,7 +144,7 @@ static int bh1749_check(struct bh1749_data *data)
 {
 	u8_t manufacturer_id;
 
-	if (i2c_reg_read_byte(data->i2c, DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+	if (i2c_reg_read_byte(data->i2c, DT_REG_ADDR(DT_DRV_INST(0)),
 			      BH1749_MANUFACTURER_ID, &manufacturer_id)) {
 		LOG_ERR("Failed when reading manufacturer ID");
 		return -EIO;
@@ -156,7 +159,7 @@ static int bh1749_check(struct bh1749_data *data)
 
 	u8_t part_id;
 
-	if (i2c_reg_read_byte(data->i2c, DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+	if (i2c_reg_read_byte(data->i2c, DT_REG_ADDR(DT_DRV_INST(0)),
 			      BH1749_SYSTEM_CONTROL, &part_id)) {
 		LOG_ERR("Failed when reading part ID");
 		return -EIO;
@@ -175,7 +178,7 @@ static int bh1749_check(struct bh1749_data *data)
 
 static int bh1749_sw_reset(struct device *dev)
 {
-	return i2c_reg_update_byte(dev, DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+	return i2c_reg_update_byte(dev, DT_REG_ADDR(DT_DRV_INST(0)),
 				   BH1749_SYSTEM_CONTROL,
 				   BH1749_SYSTEM_CONTROL_SW_RESET_Msk,
 				   BH1749_SYSTEM_CONTROL_SW_RESET);
@@ -188,7 +191,7 @@ static int bh1749_rgb_measurement_enable(struct bh1749_data *data, bool enable)
 		  BH1749_MODE_CONTROL2_RGB_EN_DISABLE;
 
 	return i2c_reg_update_byte(data->i2c,
-				   DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+				   DT_REG_ADDR(DT_DRV_INST(0)),
 				   BH1749_MODE_CONTROL2,
 				   BH1749_MODE_CONTROL2_RGB_EN_Msk,
 				   en);
@@ -217,7 +220,7 @@ static void bh1749_async_init(struct k_work *work)
 			LOG_INF("BH1749 initialized");
 		} else {
 			k_delayed_work_submit(&bh1749_init_work,
-					      async_init_delay[data->async_init_step]);
+					      K_MSEC(async_init_delay[data->async_init_step]));
 		}
 	}
 }
@@ -255,7 +258,7 @@ static int bh1749_async_init_rgb_enable(struct bh1749_data *data)
 
 static int bh1749_async_init_configure(struct bh1749_data *data)
 {
-	if (i2c_reg_write_byte(data->i2c, DT_INST_0_ROHM_BH1749_BASE_ADDRESS,
+	if (i2c_reg_write_byte(data->i2c, DT_REG_ADDR(DT_DRV_INST(0)),
 			       BH1749_MODE_CONTROL1,
 			       BH1749_MODE_CONTROL1_DEFAULTS)) {
 		LOG_ERR(
@@ -281,16 +284,17 @@ static int bh1749_init(struct device *dev)
 	bh1749_dev = dev;
 
 	struct bh1749_data *data = bh1749_dev->driver_data;
-	data->i2c = device_get_binding(DT_INST_0_ROHM_BH1749_BUS_NAME);
+	data->i2c = device_get_binding(DT_BUS_LABEL(DT_DRV_INST(0)));
 
 	if (data->i2c == NULL) {
 		LOG_ERR("Failed to get pointer to %s device!",
-			DT_INST_0_ROHM_BH1749_BUS_NAME);
+			DT_BUS_LABEL(DT_DRV_INST(0)));
 
 		return -EINVAL;
 	}
 	k_delayed_work_init(&bh1749_init_work, bh1749_async_init);
-	return k_delayed_work_submit(&bh1749_init_work, async_init_delay[data->async_init_step]);
+	return k_delayed_work_submit(&bh1749_init_work,
+				     K_MSEC(async_init_delay[data->async_init_step]));
 };
 
 static const struct sensor_driver_api bh1749_driver_api = {
@@ -304,6 +308,6 @@ static const struct sensor_driver_api bh1749_driver_api = {
 
 static struct bh1749_data bh1749_data;
 
-DEVICE_DEFINE(bh1749, DT_INST_0_ROHM_BH1749_LABEL,
+DEVICE_DEFINE(bh1749, DT_INST_LABEL(0),
 	      bh1749_init, device_pm_control_nop, &bh1749_data, NULL,
 	      POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY, &bh1749_driver_api);

@@ -22,10 +22,10 @@
 extern "C" {
 #endif
 
-#include <at_cmd.h>
-#include <at_notif.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 #include <settings/settings.h>
-#include <lte_lc.h>
+#include <modem/lte_lc.h>
 
 #define AT_RESPONSE_LEN   64        /** Length of AT-command response */
 #define HTTP_PKT_LEN      512       /** Length of HTTP request packet */
@@ -87,7 +87,7 @@ struct zzhc {
 #define zzhc_sem_post(sem)                      k_sem_give(sem)
 
 /**@brief Sleep (seconds). */
-#define zzhc_sleep(t)                           k_sleep(t * 1000)
+#define zzhc_sleep(t)                           k_sleep(K_SECONDS(t))
 
 /**
  * @brief Get pointer to the current thread.

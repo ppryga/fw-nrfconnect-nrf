@@ -6,25 +6,25 @@
 
 #include <zephyr.h>
 #include <kernel.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include <device.h>
-#include <spi.h>
-#include <gpio.h>
+#include <drivers/spi.h>
+#include <drivers/gpio.h>
 #include <sys/byteorder.h>
 #include <sensor/pmw3360.h>
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
 
+#define DT_DRV_COMPAT pixart_pmw3360
 
-#define PMW3360_SPI_DEV_NAME DT_INST_0_PIXART_PMW3360_BUS_NAME
+#define PMW3360_SPI_DEV_NAME DT_BUS_LABEL(DT_DRV_INST(0))
 
-#define PMW3360_IRQ_GPIO_DEV_NAME DT_INST_0_PIXART_PMW3360_IRQ_GPIOS_CONTROLLER
-#define PMW3360_IRQ_GPIO_PIN      DT_INST_0_PIXART_PMW3360_IRQ_GPIOS_PIN
+#define PMW3360_IRQ_GPIO_DEV_NAME DT_INST_GPIO_LABEL(0, irq_gpios)
+#define PMW3360_IRQ_GPIO_PIN      DT_INST_GPIO_PIN(0, irq_gpios)
 
-#define PMW3360_CS_GPIO_DEV_NAME DT_INST_0_PIXART_PMW3360_CS_GPIOS_CONTROLLER
-#define PMW3360_CS_GPIO_PIN      DT_INST_0_PIXART_PMW3360_CS_GPIOS_PIN
-
+#define PMW3360_CS_GPIO_DEV_NAME DT_INST_SPI_DEV_CS_GPIOS_LABEL(0)
+#define PMW3360_CS_GPIO_PIN      DT_INST_SPI_DEV_CS_GPIOS_PIN(0)
 
 /* Timings defined by spec */
 #define T_NCS_SCLK	1			/* 120 ns */
@@ -104,6 +104,9 @@ LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
 #define PMW3360_DX_POS				2
 #define PMW3360_DY_POS				4
 
+/* Rest_En position in Config2 register. */
+#define PMW3360_REST_EN_POS			5
+
 #define PMW3360_MAX_CPI				12000
 #define PMW3360_MIN_CPI				100
 
@@ -145,8 +148,8 @@ struct pmw3360_data {
 static const struct spi_config spi_cfg = {
 	.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB |
 		     SPI_MODE_CPOL | SPI_MODE_CPHA,
-	.frequency = DT_INST_0_PIXART_PMW3360_SPI_MAX_FREQUENCY,
-	.slave = DT_INST_0_PIXART_PMW3360_BASE_ADDRESS,
+	.frequency = DT_PROP(DT_DRV_INST(0), spi_max_frequency),
+	.slave = DT_REG_ADDR(DT_DRV_INST(0)),
 };
 
 static const s32_t async_init_delay[ASYNC_INIT_STEP_COUNT] = {
@@ -179,15 +182,15 @@ DEVICE_DECLARE(pmw3360);
 
 static int spi_cs_ctrl(struct pmw3360_data *dev_data, bool enable)
 {
-	u32_t val = (enable) ? (0) : (1);
+	int val = (enable) ? (0) : (1);
 	int err;
 
 	if (!enable) {
 		k_busy_wait(T_NCS_SCLK);
 	}
 
-	err = gpio_pin_write(dev_data->cs_gpio_dev, PMW3360_CS_GPIO_PIN,
-			     val);
+	err = gpio_pin_set_raw(dev_data->cs_gpio_dev, PMW3360_CS_GPIO_PIN, val);
+
 	if (err) {
 		LOG_ERR("SPI CS ctrl failed");
 	}
@@ -515,6 +518,64 @@ static int update_downshift_time(struct pmw3360_data *dev_data, u8_t reg_addr,
 	return err;
 }
 
+static int update_sample_time(struct pmw3360_data *dev_data,
+			      u8_t reg_addr_lower,
+			      u8_t reg_addr_upper,
+			      u32_t sample_time)
+{
+	/* Set sample time for the Rest1-Rest3 modes.
+	 * Values above 0x09B0 will trigger internal watchdog reset.
+	 */
+	u32_t maxtime = 0x9B0;
+	u32_t mintime = 1;
+
+	if ((sample_time > maxtime) || (sample_time < mintime)) {
+		LOG_WRN("Sample time %u out of range", sample_time);
+		return -EINVAL;
+	}
+
+	LOG_INF("Set sample time to %u ms", sample_time);
+
+	/* The sample time is (reg_value + 1) ms. */
+	sample_time--;
+	u8_t buf[2];
+
+	sys_put_le16((u16_t)sample_time, buf);
+
+	int err = reg_write(dev_data, reg_addr_lower, buf[0]);
+
+	if (!err) {
+		err = reg_write(dev_data, reg_addr_upper, buf[1]);
+	} else {
+		LOG_ERR("Failed to change sample time");
+	}
+
+	return err;
+}
+
+static int toggle_rest_modes(struct pmw3360_data *dev_data, u8_t reg_addr,
+			     bool enable)
+{
+	u8_t value;
+	int err = reg_read(dev_data, reg_addr, &value);
+
+	if (err) {
+		LOG_ERR("Failed to read Config2 register");
+		return err;
+	}
+
+	WRITE_BIT(value, PMW3360_REST_EN_POS, enable);
+
+	LOG_INF("%sable rest modes", (enable) ? ("En") : ("Dis"));
+	err = reg_write(dev_data, reg_addr, value);
+
+	if (err) {
+		LOG_ERR("Failed to set rest mode");
+	}
+
+	return err;
+}
+
 static int pmw3360_async_init_fw_load_start(struct pmw3360_data *dev_data)
 {
 	int err = 0;
@@ -621,8 +682,9 @@ static void irq_handler(struct device *gpiob, struct gpio_callback *cb,
 {
 	int err;
 
-	err = gpio_pin_disable_callback(pmw3360_data.irq_gpio_dev,
-					PMW3360_IRQ_GPIO_PIN);
+	err = gpio_pin_interrupt_configure(pmw3360_data.irq_gpio_dev,
+					   PMW3360_IRQ_GPIO_PIN,
+					   GPIO_INT_DISABLE);
 	if (unlikely(err)) {
 		LOG_ERR("Cannot disable IRQ");
 		k_panic();
@@ -653,8 +715,9 @@ static void trigger_handler(struct k_work *work)
 
 	key = k_spin_lock(&pmw3360_data.lock);
 	if (pmw3360_data.data_ready_handler) {
-		err = gpio_pin_enable_callback(pmw3360_data.irq_gpio_dev,
-					       PMW3360_IRQ_GPIO_PIN);
+		err = gpio_pin_interrupt_configure(pmw3360_data.irq_gpio_dev,
+						   PMW3360_IRQ_GPIO_PIN,
+						   GPIO_INT_LEVEL_LOW);
 	}
 	k_spin_unlock(&pmw3360_data.lock, key);
 
@@ -717,7 +780,8 @@ static void pmw3360_async_init(struct k_work *work)
 			LOG_INF("PMW3360 initialized");
 		} else {
 			k_delayed_work_submit(&dev_data->init_work,
-					      async_init_delay[dev_data->async_init_step]);
+					      K_MSEC(async_init_delay[
+						dev_data->async_init_step]));
 		}
 	}
 }
@@ -734,7 +798,7 @@ static int pmw3360_init_cs(struct pmw3360_data *dev_data)
 	}
 
 	err = gpio_pin_configure(dev_data->cs_gpio_dev, PMW3360_CS_GPIO_PIN,
-				 GPIO_DIR_OUT);
+				 GPIO_OUTPUT);
 	if (!err) {
 		err = spi_cs_ctrl(dev_data, false);
 	} else {
@@ -757,8 +821,7 @@ static int pmw3360_init_irq(struct pmw3360_data *dev_data)
 
 	err = gpio_pin_configure(dev_data->irq_gpio_dev,
 				 PMW3360_IRQ_GPIO_PIN,
-				 GPIO_DIR_IN | GPIO_INT | GPIO_PUD_PULL_UP |
-				 GPIO_INT_LEVEL | GPIO_INT_ACTIVE_LOW);
+				 GPIO_INPUT | GPIO_PULL_UP);
 	if (err) {
 		LOG_ERR("Cannot configure IRQ GPIO");
 		return err;
@@ -813,7 +876,8 @@ static int pmw3360_init(struct device *dev)
 	k_delayed_work_init(&dev_data->init_work, pmw3360_async_init);
 
 	k_delayed_work_submit(&dev_data->init_work,
-			      async_init_delay[dev_data->async_init_step]);
+			      K_MSEC(async_init_delay[
+				dev_data->async_init_step]));
 
 	return err;
 }
@@ -909,11 +973,13 @@ static int pmw3360_trigger_set(struct device *dev,
 	k_spinlock_key_t key = k_spin_lock(&dev_data->lock);
 
 	if (handler) {
-		err = gpio_pin_enable_callback(dev_data->irq_gpio_dev,
-					       PMW3360_IRQ_GPIO_PIN);
+		err = gpio_pin_interrupt_configure(dev_data->irq_gpio_dev,
+						   PMW3360_IRQ_GPIO_PIN,
+						   GPIO_INT_LEVEL_LOW);
 	} else {
-		err = gpio_pin_disable_callback(dev_data->irq_gpio_dev,
-						PMW3360_IRQ_GPIO_PIN);
+		err = gpio_pin_interrupt_configure(dev_data->irq_gpio_dev,
+						   PMW3360_IRQ_GPIO_PIN,
+						   GPIO_INT_DISABLE);
 	}
 
 	if (!err) {
@@ -948,6 +1014,12 @@ static int pmw3360_attr_set(struct device *dev, enum sensor_channel chan,
 		err = update_cpi(dev_data, PMW3360_SVALUE_TO_CPI(*val));
 		break;
 
+	case PMW3360_ATTR_REST_ENABLE:
+		err = toggle_rest_modes(dev_data,
+					PMW3360_REG_CONFIG2,
+					PMW3360_SVALUE_TO_BOOL(*val));
+		break;
+
 	case PMW3360_ATTR_RUN_DOWNSHIFT_TIME:
 		err = update_downshift_time(dev_data,
 					    PMW3360_REG_RUN_DOWNSHIFT,
@@ -966,6 +1038,27 @@ static int pmw3360_attr_set(struct device *dev, enum sensor_channel chan,
 					    PMW3360_SVALUE_TO_TIME(*val));
 		break;
 
+	case PMW3360_ATTR_REST1_SAMPLE_TIME:
+		err = update_sample_time(dev_data,
+					 PMW3360_REG_REST1_RATE_LOWER,
+					 PMW3360_REG_REST1_RATE_UPPER,
+					 PMW3360_SVALUE_TO_TIME(*val));
+		break;
+
+	case PMW3360_ATTR_REST2_SAMPLE_TIME:
+		err = update_sample_time(dev_data,
+					 PMW3360_REG_REST2_RATE_LOWER,
+					 PMW3360_REG_REST2_RATE_UPPER,
+					 PMW3360_SVALUE_TO_TIME(*val));
+		break;
+
+	case PMW3360_ATTR_REST3_SAMPLE_TIME:
+		err = update_sample_time(dev_data,
+					 PMW3360_REG_REST3_RATE_LOWER,
+					 PMW3360_REG_REST3_RATE_UPPER,
+					 PMW3360_SVALUE_TO_TIME(*val));
+		break;
+
 	default:
 		LOG_ERR("Unknown attribute");
 		return -ENOTSUP;
@@ -981,6 +1074,6 @@ static const struct sensor_driver_api pmw3360_driver_api = {
 	.attr_set     = pmw3360_attr_set,
 };
 
-DEVICE_AND_API_INIT(pmw3360, DT_INST_0_PIXART_PMW3360_LABEL, pmw3360_init,
+DEVICE_AND_API_INIT(pmw3360, DT_INST_LABEL(0), pmw3360_init,
 		    NULL, NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &pmw3360_driver_api);

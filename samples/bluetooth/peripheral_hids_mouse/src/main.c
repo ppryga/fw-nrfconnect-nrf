@@ -11,7 +11,7 @@
 #include <sys/printk.h>
 #include <sys/byteorder.h>
 #include <zephyr.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <soc.h>
 #include <assert.h>
 
@@ -117,6 +117,8 @@ static struct conn_mode {
 	bool in_boot_mode;
 } conn_mode[CONFIG_BT_GATT_HIDS_MAX_CLIENT_COUNT];
 
+static struct k_work adv_work;
+
 static struct k_work pairing_work;
 struct pairing_data_mitm {
 	struct bt_conn *conn;
@@ -150,7 +152,6 @@ static void bond_find(const struct bt_bond_info *info, void *user_data)
 }
 #endif
 
-
 static void advertising_continue(void)
 {
 	struct bt_le_adv_param adv_param;
@@ -160,15 +161,16 @@ static void advertising_continue(void)
 
 	if (!k_msgq_get(&bonds_queue, &addr, K_NO_WAIT)) {
 		char addr_buf[BT_ADDR_LE_STR_LEN];
-		struct bt_conn *conn;
 
-		adv_param = *BT_LE_ADV_CONN_DIR;
-		conn = bt_conn_create_slave_le(&addr, &adv_param);
-		if (!conn) {
+		adv_param = *BT_LE_ADV_CONN_DIR(&addr);
+		adv_param.options |= BT_LE_ADV_OPT_DIR_ADDR_RPA;
+
+		int err = bt_le_adv_start(&adv_param, NULL, 0, NULL, 0);
+
+		if (err) {
 			printk("Directed advertising failed to start\n");
 			return;
 		}
-		bt_conn_unref(conn);
 
 		bt_addr_le_to_str(&addr, addr_buf, BT_ADDR_LE_STR_LEN);
 		printk("Direct advertising to %s started\n", addr_buf);
@@ -190,25 +192,20 @@ static void advertising_continue(void)
 	}
 }
 
-
 static void advertising_start(void)
 {
-	int err;
-
-	/* Clear the application start for advertising restart. */
-	err = bt_le_adv_stop();
-	if (err) {
-		printk("Failed to stop advertising (err %d)\n", err);
-	}
-
 #if CONFIG_BT_DIRECTED_ADVERTISING
 	k_msgq_purge(&bonds_queue);
 	bt_foreach_bond(BT_ID_DEFAULT, bond_find, NULL);
 #endif
 
-	advertising_continue();
+	k_work_submit(&adv_work);
 }
 
+static void advertising_process(struct k_work *work)
+{
+	advertising_continue();
+}
 
 static void pairing_process(struct k_work *work)
 {
@@ -266,7 +263,7 @@ static void connected(struct bt_conn *conn, u8_t err)
 	if (err) {
 		if (err == BT_HCI_ERR_ADV_TIMEOUT) {
 			printk("Direct advertising to %s timed out\n", addr);
-			advertising_continue();
+			k_work_submit(&adv_work);
 		} else {
 			printk("Failed to connect to %s (%u)\n", addr, err);
 		}
@@ -528,7 +525,7 @@ static void mouse_movement_send(s16_t x_delta, s16_t y_delta)
 			sys_put_le16(y, y_buff);
 
 			/* Encode report. */
-			BUILD_ASSERT_MSG(sizeof(buffer) == 3,
+			BUILD_ASSERT(sizeof(buffer) == 3,
 					 "Only 2 axis, 12-bit each, are supported");
 
 			buffer[0] = x_buff[0];
@@ -724,7 +721,7 @@ void button_changed(u32_t button_state, u32_t has_changed)
 			return;
 		}
 		if (k_msgq_num_used_get(&hids_queue) == 1) {
-			k_delayed_work_submit(&hids_work, 0);
+			k_delayed_work_submit(&hids_work, K_NO_WAIT);
 		}
 	}
 }
@@ -780,6 +777,7 @@ void main(void)
 
 	k_delayed_work_init(&hids_work, mouse_handler);
 	k_work_init(&pairing_work, pairing_process);
+	k_work_init(&adv_work, advertising_process);
 
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();
@@ -790,7 +788,7 @@ void main(void)
 	configure_buttons();
 
 	while (1) {
-		k_sleep(MSEC_PER_SEC);
+		k_sleep(K_SECONDS(1));
 		/* Battery level simulation */
 		bas_notify();
 	}

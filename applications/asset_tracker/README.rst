@@ -21,18 +21,25 @@ The collected data includes the GPS position, accelerometer readings (the device
 
    * - Sensor data
      - nRF Cloud sensor type
+     - Data unit
    * - GPS coordinates
      - GPS
+     - NMEA Gxxx string
    * - Accelerometer data
      - FLIP
+     - String
    * - Temperature
      - TEMP
+     - Celsius
    * - Humidity
      - HUMID
+     - Percent
    * - Air pressure
      - AIR_PRESS
+     - Pascal
    * - Light sensor
      - LIGHT
+     - Lux
 
 On the nRF9160 DK, the application uses simulated sensor data by default, but it can be configured with Kconfig options to use real sensors to collect data.
 On the Thingy:91, onboard sensors are used by default.
@@ -42,19 +49,54 @@ In addition to the sensor data, the application retrieves information from the L
 This information is available in nRF Cloud under the section **Cellular Link Monitor**.
 
 The `LTE Link Monitor`_ application, implemented as part of `nRF Connect for Desktop`_  can be used to send AT commands to the device and receive the responses.
+You can also send AT commands from the **Terminal** card on nRF Cloud when the device is connected.
 
-By default, the asset tracker supports firmware updates through :ref:`lib_aws_fota`.
+By default, the Asset Tracker supports firmware updates through :ref:`lib_aws_fota`.
 
+.. _power_opt:
+
+Power optimization
+==================
+
+The Asset Tracker can run in three power modes that are configured in the Kconfig file of the application.
+Currently the dynamic switching between eDRX and PSM during run-time is only supported on the nRF9160 DK.
+However, both nRF9160 DK and Thingy:91 support build-time configuration for enabling eDRX, PSM or both.
+
+.. note::
+   Not all cellular network providers support these modes, and the granted parameters can vary between networks.
+   Network operators can also limit the availability of power saving features for roaming users.
+   SIM card subscription also affects the availability of the cellular IoT power saving features.
+
+
+Demo mode
+	This is the default setting.
+	In this mode, the device maintains a continuous cellular link and can receive data at all times.
+	To enable this mode, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=n``.
+
+Request eDRX mode
+	In this mode, the device requests the eDRX feature from the cellular network to save power.
+	The device maintains a continuous cellular link.
+	The device is reachable only at the configured eDRX intervals or when the device sends data.
+	To enable this mode on an nRF9160 DK during run-time, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=y`` and then set Switch 2 to the N.C. position.
+	On Thingy:91 and nRF9160 DK, the ``CONFIG_LTE_EDRX_REQ`` option is used to enable eDRX during build-time.
+
+Request Power Saving Mode (PSM)
+	In this mode, the device requests the PSM feature from the cellular network to save power.
+	The device maintains a continuous cellular link.
+	The device is reachable only at the configured PSM intervals or when the device sends data.
+	To enable this mode on an nRF9160 DK during run-time, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=y`` and then set Switch 2 to the GND position.
+	On Thingy:91 and nRF9160 DK, the ``CONFIG_GPS_CONTROL_PSM_ENABLE_ON_START`` option is used to enable PSM during build-time.
 
 Requirements
 ************
 
-* One of the following development boards:
+The sample supports the following development kits:
 
-    * |nRF9160DK|
-    * |Thingy91|
+.. include:: /includes/boardname_tables/sample_boardnames.txt
+   :start-after: set6_start
+   :end-before: set6_end
 
-* .. include:: /includes/spm.txt
+.. include:: /includes/spm.txt
 
 .. _asset_tracker_user_interface:
 
@@ -76,11 +118,11 @@ Switch 2 (only on nRF9160 DK):
 On the nRF9160 DK, the application state is indicated by the LEDs.
 
 LED 3 and LED 4:
-    * LED 3 blinking: Connecting - The device is resolving DNS and connecting to the nRF Cloud.
-    * LED 3 and LED 4 blinking: Pairing started - The MQTT connection has been established and the pairing procedure towards the nRF Cloud has been initiated.
-    * LED 3 ON and LED 4 blinking: Pattern entry - The user has started entering the pairing pattern.
-    * LED 4 blinking: Pattern sent - Pattern has been entered and sent to the nRF Cloud for verification.
-    * LED 4 ON: Connected - The device is ready for sensor data transfer.
+    * LED 3 blinking: The device is connecting to the LTE network.
+    * LED 3 ON: The device is connected to the LTE network.
+    * LED 4 blinking: The device is connecting to nRF Cloud.
+    * LED 3 and LED 4 blinking: The MQTT connection has been established and the user association procedure with nRF Cloud has been initiated.
+    * LED 4 ON: The device is connected and ready for sensor data transfer.
 
     .. figure:: /images/nrf_cloud_led_states.svg
        :alt: Application state indicated by LEDs
@@ -92,6 +134,8 @@ All LEDs (1-4):
     * Blinking in cross pattern (LED 1 and 4, LED 2 and 3): Communication error with the nRF Cloud.
 
 On the Thingy:91, the application state is indicated by a single RGB LED as follows:
+
+.. _thingy91_operating_states:
 
 .. list-table::
    :header-rows: 1
@@ -114,32 +158,20 @@ On the Thingy:91, the application state is indicated by a single RGB LED as foll
    * - Red
      - Error
 
-.. _power_opt:
+.. _lwm2m_carrier_support:
 
-Power optimization
-******************
+Using the LwM2M carrier library
+*******************************
+This application supports the |NCS| :ref:`liblwm2m_carrier_readme` library.
 
-The Asset Tracker can run in three power modes that are configured in the Kconfig file of the application.
-These settings are currently only supported on the nRF9160 DK.
+To enable the LwM2M carrier library, add the following parameter to your build command:
 
-.. note::
-   Not all cellular network providers support these modes, and the granted parameters can vary between networks.
+``-DOVERLAY_CONFIG=lwm2m_carrier_overlay.conf``
 
-Demo mode
-	This is the default setting.
-	In this mode, the device maintains a continuous cellular link.
-	To enable this mode, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=n``.
+In |SES|, select :guilabel:`Tools` > :guilabel:`Options` > :guilabel:`nRF Connect` to add the above CMake parameter.
+See :ref:`cmake_options` for more information.
 
-Request eDRX mode
-	In this mode, the device requests the eDRX feature from the cellular network to save power.
-	To enable this mode, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=y`` and then
-	set Switch 2 to the N.C. position.
-
-Request Power Saving Mode (PSM)
-	In this mode, the device requests the PSM feature from the cellular network to save power.
-	To enable this mode, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=y`` and then
-	set Switch 2 to the GND position.
-
+Alternatively, you can manually set the configuration options to match the contents of the overlay config file.
 
 Building and running
 ********************
@@ -152,6 +184,9 @@ The Kconfig file of the application contains options to configure the applicatio
 For example, configure ``CONFIG_POWER_OPTIMIZATION_ENABLE`` to enable power optimization or ``CONFIG_TEMP_USE_EXTERNAL`` to use an external temperature sensor instead of simulated temperature data.
 In |SES|, select **Project** > **Configure nRF Connect SDK project** to browse and configure these options.
 Alternatively, use the command line tool ``menuconfig`` or configure the options directly in ``prj.conf``.
+
+This application supports the |NCS| :ref:`ug_bootloader`, but it is disabled by default.
+To enable the immutable bootloader, set ``CONFIG_SECURE_BOOT=y``.
 
 Testing
 =======
@@ -172,14 +207,13 @@ After programming the application and all prerequisites to your board, test the 
 #. Observe in the terminal window that the connection to the nRF Cloud is established. This may take several minutes.
 #. Open a web browser and navigate to https://nrfcloud.com/.
    Follow the instructions to set up your account and add an LTE device.
-#. The first time you start the application, pair the device to your account:
+#. The first time you start the application, add the device to your account:
 
    a. Observe that the LED(s) indicate that the device is waiting for user association.
-   #. Follow the instructions on `nRF Cloud`_ to pair your device.
-   #. If the pairing is successful, the board and your nRF Cloud account are paired, and the device reboots.
+   #. Follow the instructions on `nRF Cloud`_ to add your device.
+   #. If association is successful, the device reconnects to nRF Cloud.
       If the LED(s) indicate an error, check the details of the error in the terminal window.
-      The device must be power-cycled to restart the pairing procedure.
-   #. After reboot, the board connects to the nRF Cloud.
+      The device must be power-cycled to restart the association procedure.
 #. Observe that the LED(s) indicate that the connection is established.
 #. Observe that the device count on your nRF Cloud dashboard is incremented by one.
 #. Select the device from your device list on nRF Cloud, and observe that sensor data and modem information is received from the board.
@@ -194,14 +228,14 @@ Dependencies
 
 This application uses the following |NCS| libraries and drivers:
 
-    * :ref:`lib_nrf_cloud`
-    * :ref:`modem_info_readme`
-    * :ref:`at_cmd_parser_readme`
-    * ``drivers/nrf9160_gps``
-    * ``lib/bsd_lib``
-    * ``drivers/sensor/sensor_sim``
-    * :ref:`dk_buttons_and_leds_readme`
-    * ``drivers/lte_link_control``
+* :ref:`lib_nrf_cloud`
+* :ref:`modem_info_readme`
+* :ref:`at_cmd_parser_readme`
+* ``drivers/nrf9160_gps``
+* ``lib/bsd_lib``
+* ``drivers/sensor/sensor_sim``
+* :ref:`dk_buttons_and_leds_readme`
+* ``drivers/lte_link_control``
 
 In addition, it uses the Secure Partition Manager sample:
 

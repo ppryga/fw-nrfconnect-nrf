@@ -6,12 +6,12 @@
 
 #include <zephyr.h>
 #include <stdio.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <string.h>
 
 #include <net/mqtt.h>
 #include <net/socket.h>
-#include <lte_lc.h>
+#include <modem/lte_lc.h>
 #if defined(CONFIG_LWM2M_CARRIER)
 #include <lwm2m_carrier.h>
 #endif
@@ -154,7 +154,8 @@ static int publish_get_payload(struct mqtt_client *c, size_t length)
 
 			printk("mqtt_read_publish_payload: EAGAIN\n");
 
-			err = poll(&fds, 1, K_SECONDS(CONFIG_MQTT_KEEPALIVE));
+			err = poll(&fds, 1,
+				   CONFIG_MQTT_KEEPALIVE * MSEC_PER_SEC);
 			if (err > 0 && (fds.revents & POLLIN) == POLLIN) {
 				continue;
 			} else {
@@ -329,7 +330,11 @@ static void client_init(struct mqtt_client *client)
 	client->tx_buf_size = sizeof(tx_buffer);
 
 	/* MQTT transport configuration */
+#if defined(CONFIG_MQTT_LIB_TLS)
+	client->transport.type = MQTT_TRANSPORT_SECURE;
+#else
 	client->transport.type = MQTT_TRANSPORT_NON_SECURE;
+#endif
 }
 
 /**@brief Initialize the file descriptor structure used by poll.
@@ -404,14 +409,14 @@ void main(void)
 	}
 
 	while (1) {
-		err = poll(&fds, 1, K_SECONDS(CONFIG_MQTT_KEEPALIVE));
+		err = poll(&fds, 1, mqtt_keepalive_time_left(&client));
 		if (err < 0) {
 			printk("ERROR: poll %d\n", errno);
 			break;
 		}
 
 		err = mqtt_live(&client);
-		if (err != 0) {
+		if ((err != 0) && (err != -EAGAIN)) {
 			printk("ERROR: mqtt_live %d\n", err);
 			break;
 		}

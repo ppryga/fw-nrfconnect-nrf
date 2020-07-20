@@ -5,7 +5,7 @@
  */
 
 #include <zephyr.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include <net/lwm2m.h>
 
 #include "ui.h"
@@ -22,7 +22,7 @@ LOG_MODULE_REGISTER(app_lwm2m_accel, CONFIG_APP_LOG_LEVEL);
 #if defined(CONFIG_FLIP_POLL)
 #define FLIP_POLL_INTERVAL		K_MSEC(CONFIG_FLIP_POLL_INTERVAL)
 #else
-#define FLIP_POLL_INTERVAL		0
+#define FLIP_POLL_INTERVAL		K_NO_WAIT
 #endif
 
 #ifdef CONFIG_ACCEL_USE_SIM

@@ -14,11 +14,12 @@
  */
 
 #include <zephyr.h>
+#include <power/reboot.h>
 #include <stdbool.h>
 #include <nfc_t4t_lib.h>
 
 #include "ndef_file_m.h"
-#include <nfc/ndef/nfc_ndef_msg.h>
+#include <nfc/ndef/msg.h>
 
 #include <dk_buttons_and_leds.h>
 

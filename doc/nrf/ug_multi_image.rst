@@ -5,7 +5,7 @@ Multi-image builds
 
 In many cases, the firmware that is programmed to a device consists of not only one application, but several separate images, where one of the images (the *parent image*) requires one or more other images (the *child images*) to be present.
 The child image then *chain-loads* (or *boots*) the parent image, which in turn might be a child image to another parent image and boot that one.
-The most common use case for builds consisting of multiple images is an application that requires a bootloader to be present.
+The most common use cases for builds consisting of multiple images are applications that require a bootloader to be present, or applications for multi-core CPUs.
 
 
 When to use multiple images
@@ -23,6 +23,7 @@ Using multiple images has the following advantages:
   This partitioning is often useful for bootloaders.
 * Since there is a symbol table for each image, the same symbol names can exist multiple times in the final firmware.
   This is useful for bootloader images, which might required their own copy of a library that the application uses, but in a different version or configuration.
+* In multi-core builds, the build configuration of a child image in a separate core can be made known to the parent image.
 
 In the |NCS|, multiple images are required in the following scenarios:
 
@@ -31,7 +32,7 @@ nRF9160 SPU configuration
    The code in the secure domain can configure the System Protection Unit (SPU) to allow non-secure access to the CPU resources that are required by the application, and then jump to the code in the non-secure domain.
    Therefore, the nRF9160 samples (the parent image) require the :ref:`secure_partition_manager` (the child image) to be programmed in addition to the actual application.
 
-   See :ref:`zephyr:nrf9160_pca10090` and :ref:`ug_nrf9160` for more information.
+   See :ref:`zephyr:nrf9160dk_nrf9160` and :ref:`ug_nrf9160` for more information.
 
 MCUboot bootloader
    The MCUboot bootloader establishes a root of trust by verifying the next step in the boot sequence.
@@ -46,11 +47,6 @@ nRF5340 support
    nRF5340 contains two separate processors: a network core and an application core.
    When programming applications to the nRF5340 PDK, they must be divided into at least two images, one for each core.
    See :ref:`ug_nrf5340` for more information.
-
-   .. important::
-      Currently, the two images must be built and programmed separately.
-      Multi-image builds are not yet supported for nRF5340.
-
 
 Default configuration
 *********************
@@ -72,6 +68,7 @@ To change the default configuration and configure how a child image is handled, 
 For example, to use a prebuilt HEX file of the :ref:`secure_partition_manager` instead of building it, select :option:`CONFIG_SPM_BUILD_STRATEGY_USE_HEX_FILE` instead of the default :option:`CONFIG_SPM_BUILD_STRATEGY_FROM_SOURCE`, and specify the HEX file in :option:`CONFIG_SPM_HEX_FILE`.
 To ignore an MCUboot child image, select :option:`CONFIG_MCUBOOT_BUILD_STRATEGY_SKIP_BUILD` instead of :option:`CONFIG_MCUBOOT_BUILD_STRATEGY_FROM_SOURCE`.
 
+.. _ug_multi_image_defining:
 
 Defining and enabling a child image
 ***********************************
@@ -108,6 +105,17 @@ In this code, ``add_child_image`` registers the child image with the given name 
 Note that both the child image's application build scripts and the core build scripts are executed.
 The core build scripts might use a different configuration and possibly different DeviceTree settings.
 
+If a child image is to be executed on a different core, you must specify the name space for the child image as *domain* when adding the child image.
+For example:
+
+.. code-block:: cmake
+
+   add_child_image(
+      NAME hci_rpmsg
+      SOURCE_DIR ${ZEPHYR_BASE}/samples/bluetooth/hci_rpmsg
+      DOMAIN nrf5340pdk_nrf5340_cpunet)
+
+
 Adding configuration options
 ============================
 
@@ -117,6 +125,12 @@ The three options are:
 * Build the child image from source along with the parent image - *IMAGENAME*\_BUILD_STRATEGY_FROM_SOURCE
 * Merge the specified HEX file of the child image with the parent image - *IMAGENAME*\_BUILD_STRATEGY_USE_HEX_FILE, and *IMAGENAME*\_HEX_FILE to specify the HEX file
 * Ignore the child image when building and build only the parent image - *IMAGENAME*\_BUILD_STRATEGY_SKIP_BUILD
+
+
+.. note::
+
+   Child images that are built with the build strategy *IMAGENAME*\ _BUILD_STRATEGY_SKIP_BUILD or *IMAGENAME*\ _BUILD_STRATEGY_USE_HEX_FILE must define a :ref:`static partition <ug_pm_static_providing>`.
+
 
 You must add these four configuration options to the Kconfig file for your child image, replacing *IMAGENAME* with the (uppercase) name of your child image (as specified in ``add_child_image``).
 

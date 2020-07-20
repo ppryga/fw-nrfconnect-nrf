@@ -21,7 +21,7 @@ extern "C" {
  *
  */
 #include <zephyr.h>
-#include <sensor.h>
+#include <drivers/sensor.h>
 
 struct light_sensor_data {
 	/* light levels in lux */
@@ -38,7 +38,8 @@ typedef void (*light_sensor_data_ready_cb)(void);
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
-int light_sensor_init_and_start(const light_sensor_data_ready_cb cb);
+int light_sensor_init_and_start(struct k_work_q *work_q,
+				const light_sensor_data_ready_cb cb);
 
 /**
  * @brief Get latest sampled light data.
@@ -63,6 +64,13 @@ void light_sensor_set_send_interval(const u32_t interval_s);
  * @return Interval, in seconds.
  */
 u32_t light_sensor_get_send_interval(void);
+
+/**
+ * @brief Perform an immediate poll of the light sensor.
+ *
+ * @return 0 if the operation was successful, otherwise a (negative) error code.
+ */
+int light_sensor_poll(void);
 
 #ifdef __cplusplus
 }

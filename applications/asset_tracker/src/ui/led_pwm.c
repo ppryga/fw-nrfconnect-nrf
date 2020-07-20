@@ -5,7 +5,7 @@
  */
 
 #include <zephyr.h>
-#include <pwm.h>
+#include <drivers/pwm.h>
 #include <string.h>
 
 #include "ui.h"
@@ -67,6 +67,9 @@ static const struct led_effect effect[] = {
 	[UI_LED_GPS_SEARCHING] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
 					UI_LED_OFF_PERIOD_ERROR,
 					UI_LED_GPS_SEARCHING_COLOR),
+	[UI_LED_GPS_BLOCKED] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
+					UI_LED_OFF_PERIOD_ERROR,
+					UI_LED_GPS_BLOCKED_COLOR),
 	[UI_LED_GPS_FIX] = LED_EFFECT_LED_BREATHE(UI_LED_ON_PERIOD_ERROR,
 					UI_LED_OFF_PERIOD_ERROR,
 					UI_LED_GPS_FIX_COLOR),
@@ -87,7 +90,8 @@ static const size_t led_pins[3] = {
 static void pwm_out(struct led *led, struct led_color *color)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(color->c); i++) {
-		pwm_pin_set_usec(led->pwm_dev, led_pins[i], 255, color->c[i]);
+		pwm_pin_set_usec(led->pwm_dev, led_pins[i],
+				 255, color->c[i], 0);
 	}
 }
 
@@ -131,7 +135,7 @@ static void work_handler(struct k_work *work)
 		s32_t next_delay =
 			leds.effect->steps[leds.effect_step].substep_time;
 
-		k_delayed_work_submit(&leds.work, next_delay);
+		k_delayed_work_submit(&leds.work, K_MSEC(next_delay));
 	}
 }
 
@@ -153,7 +157,7 @@ static void led_update(struct led *led)
 		s32_t next_delay =
 			led->effect->steps[led->effect_step].substep_time;
 
-		k_delayed_work_submit(&led->work, next_delay);
+		k_delayed_work_submit(&led->work, K_MSEC(next_delay));
 	} else {
 		LOG_DBG("LED effect with no effect");
 	}

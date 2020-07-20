@@ -8,8 +8,8 @@
 #include <zephyr.h>
 #include <stdio.h>
 #include <init.h>
-#include <at_cmd.h>
-#include <at_notif.h>
+#include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 #include <sys/slist.h>
 
 LOG_MODULE_REGISTER(at_notif, CONFIG_AT_NOTIF_LOG_LEVEL);
@@ -100,7 +100,7 @@ static int remove_notif_handler(void *ctx, at_notif_handler_t handler)
 }
 
 /**@brief AT command notifications handler. */
-static void notif_dispatch(char *response)
+static void notif_dispatch(const char *response)
 {
 	struct notif_handler *curr, *tmp;
 
@@ -121,6 +121,15 @@ static void notif_dispatch(char *response)
 static int module_init(struct device *dev)
 {
 	ARG_UNUSED(dev);
+
+	static bool initialized;
+
+	if (initialized) {
+		LOG_WRN("Already initialized. Nothing to do");
+		return 0;
+	}
+
+	initialized = true;
 
 	LOG_DBG("Initialization");
 	sys_slist_init(&handler_list);

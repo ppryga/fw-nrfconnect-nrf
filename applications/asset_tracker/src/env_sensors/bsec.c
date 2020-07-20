@@ -6,11 +6,11 @@
 
 #include <zephyr.h>
 #include <string.h>
-#include <atomic.h>
+#include <sys/atomic.h>
 #include <spinlock.h>
 #include <settings/settings.h>
 #include <sys/byteorder.h>
-#include <i2c.h>
+#include <drivers/i2c.h>
 #include "bsec_integration.h"
 #include "env_sensors.h"
 
@@ -80,6 +80,8 @@ static u32_t data_send_interval_s = CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL;
 static bool backoff_enabled;
 static bool initialized;
 
+static struct k_work_q *env_sensors_work_q;
+
 static int settings_set(const char *key, size_t len_rd,
 			settings_read_cb read_cb, void *cb_arg)
 {
@@ -139,6 +141,11 @@ static s8_t bus_read(u8_t dev_addr, u8_t reg_addr,
 static s64_t get_timestamp_us(void)
 {
 	return k_uptime_get()*1000;
+}
+
+static void delay_ms(u32_t period)
+{
+	k_sleep(K_MSEC(period));
 }
 
 static void output_ready(s64_t timestamp, float iaq, u8_t iaq_accuracy,
@@ -242,13 +249,14 @@ int env_sensors_get_air_quality(env_sensor_data_t *sensor_data)
 
 static inline int submit_poll_work(const u32_t delay_s)
 {
-	return k_delayed_work_submit(&env_sensors_poller,
-				     K_SECONDS((u32_t)delay_s));
+	return k_delayed_work_submit_to_queue(env_sensors_work_q,
+					      &env_sensors_poller,
+					      K_SECONDS((u32_t)delay_s));
 }
 
 int env_sensors_poll(void)
 {
-	return initialized ? submit_poll_work(K_NO_WAIT) : -ENXIO;
+	return initialized ? submit_poll_work(0) : -ENXIO;
 }
 
 static void env_sensors_poll_fn(struct k_work *work)
@@ -266,10 +274,15 @@ static void env_sensors_poll_fn(struct k_work *work)
 		CONFIG_ENVIRONMENT_DATA_BACKOFF_TIME : data_send_interval_s);
 }
 
-int env_sensors_init_and_start(const env_sensors_data_ready_cb cb)
+int env_sensors_init_and_start(struct k_work_q *work_q,
+			       const env_sensors_data_ready_cb cb)
 {
 	return_values_init bsec_ret;
 	int ret;
+
+	if ((work_q == NULL) || (cb == NULL)) {
+		return -EINVAL;
+	}
 
 	i2c_master = device_get_binding("I2C_2");
 	if (!i2c_master) {
@@ -282,7 +295,7 @@ int env_sensors_init_and_start(const env_sensors_data_ready_cb cb)
 		return ret;
 	}
 	bsec_ret = bsec_iot_init(BSEC_SAMPLE_RATE, 1.2f, bus_write,
-				bus_read, (void *)k_sleep, state_load,
+				bus_read, delay_ms, state_load,
 				config_load);
 	if (bsec_ret.bme680_status) {
 		/* Could not initialize BME680 */
@@ -297,6 +310,8 @@ int env_sensors_init_and_start(const env_sensors_data_ready_cb cb)
 			CONFIG_SYSTEM_WORKQUEUE_PRIORITY, 0, K_NO_WAIT);
 
 	data_ready_cb = cb;
+
+	env_sensors_work_q = work_q;
 
 	k_delayed_work_init(&env_sensors_poller, env_sensors_poll_fn);
 

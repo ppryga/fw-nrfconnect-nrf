@@ -15,9 +15,10 @@ Before you start
 ****************
 
 Before you can build the documentation, install the |NCS| as described in :ref:`gs_installing`.
-Make sure that you have installed the required :ref:`Python dependencies <additional_deps_win>`.
+Make sure that you have installed the required :ref:`Python dependencies <additional_deps>`.
 
 See the *Installing the documentation processors* section in the :ref:`zephyr:zephyr_doc` developer guide for information about installing the required tools to build the documentation and their supported versions.
+In addition to these tools, you must install `mscgen`_ and make sure the ``mscgen`` executable is in your ``PATH``.
 
 .. note::
    On Windows, the Sphinx executable ``sphinx-build.exe`` is placed in
@@ -35,7 +36,7 @@ The ``nrf`` subfolder in that directory contains all .rst source files that are 
 Documentation for samples and libraries are provided in a ``README.rst`` or ``*.rst`` file in the same directory as the code.
 
 Building the documentation output requires building output for all documentation sets.
-Currently, there are four sets: nrf, nrfxlib, zephyr, and mcuboot.
+Currently, there are four sets: nrf, nrfxlib, zephyr, and mcuboot (covering the contents of :file:`bootloader/mcuboot`).
 Since there are links from the ncs documentation set into other documentation sets, the other documentation sets must be built first.
 
 Building documentation output
@@ -43,13 +44,12 @@ Building documentation output
 
 Complete the following steps to build the documentation output:
 
-1. Create the build folder ``ncs/nrf/doc/_build``.
+1. Open a shell and enter the doc folder ``ncs/nrf/doc``.
 
    * On Windows:
 
-     a. Navigate to ``ncs/nrf/doc``.
-     #. Right-click to create a folder and name it ``_build``.
-     #. Hold shift and right-click on the new folder.
+     a. Navigate to ``ncs/nrf``.
+     #. Hold shift and right-click on the ``doc`` folder.
         Select **Open command window here**.
 
    * On Linux or macOS:
@@ -62,30 +62,23 @@ Complete the following steps to build the documentation output:
 
            cd ~/ncs/nrf/doc
 
-     #. Create a folder named ``_build`` and enter it:
-
-        .. code-block:: console
-
-           mkdir -p _build && cd _build
-
-#. Load the environment setting for Zephyr builds.
-
-   * On Windows:
-
-        .. code-block:: console
-
-           ..\..\..\zephyr\zephyr-env.cmd
-   * On Linux or macOS:
-
-        .. code-block:: console
-
-           source ../../../zephyr/zephyr-env.sh
-
 #. Generate the Ninja build files:
 
         .. code-block:: console
 
-           cmake -GNinja ..
+           cmake -GNinja -B_build .
+
+#. Enter the generated build folder:
+
+        .. code-block:: console
+
+           cd _build
+
+#. Run ninja to build the Kconfig documentation:
+
+        .. code-block:: console
+
+           ninja kconfig-html
 
 #. Run ninja to build the Zephyr documentation:
 
@@ -115,9 +108,9 @@ Complete the following steps to build the documentation output:
 The documentation output is written to ``_build\html``. Double-click the ``index.html`` file to display the documentation in your browser.
 
 .. tip::
-   If you modify or add RST files, you only need to rerun the steps that build the respective documentation: step 4 (if you modified the Zephyr documentation), step 5 (if you modified the nrfxlib documentation), step 6 (if you modified the MCUboot documentation), or step 7 (if you modified the |NCS| documentation).
+   If you modify or add RST files, you only need to rerun the steps that build the respective documentation: step 4 (if you did changes to Kconfig), step 5 (if you modified the Zephyr documentation), step 6 (if you modified the nrfxlib documentation), step 7 (if you modified the MCUboot documentation), or step 8 (if you modified the |NCS| documentation).
 
-   If you open up a new command prompt, you must repeat step 2.
+
 
 Caching and cleaning
 ********************
