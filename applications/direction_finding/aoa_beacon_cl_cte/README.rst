@@ -18,7 +18,6 @@ Requirements
 A Nordic board with Bluetooth LE 5.1 support:
 
    * nRF52833 Development Kit board (PCA10100)
-   * nRF52811 Development Kit board (PCA10068)
 
 Building and running
 ********************
@@ -82,3 +81,18 @@ A valid range of the number of 8 us is 2-20.
 Currently, due to a known issue, the max value is 10 (the issue is under investigation).
 To set CTE length, use the :cpp:func:`dfe_set_duration` function.
 The radio is configured in :cpp:func:`dfe_init()` function.
+
+UART Output transmission
+========================
+
+Sample software uses UART port as a console output.
+User can check if application is running there or see information about error if occurs.
+
+UART settings
+-------------
+	* Baud rate 115200
+	* Data bits 8
+	* Stop bits 1
+	* Parity  None
+	* Flow Control Off
+

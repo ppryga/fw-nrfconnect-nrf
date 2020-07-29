@@ -19,7 +19,6 @@ Requirements
 A Nordic board with Bluetooth LE 5.1 support:
 
    * nRF52833 Development Kit board (PCA10100)
-   * nRF52811 Development Kit board (PCA10068)
 
 Building and running
 ********************
@@ -37,9 +36,7 @@ KConfig
 The application provides the following custom configuration options:
 
 	* ``AOA_LOCATOR_UART_PORT`` defines the name of the UART port use to forward IQ samples.
-
-Note that oversampling is a Nordic radio feature.
-Both configurations cannot work at once so make sure to disable one when enabling the other.
+	* ``AOA_LOCATOR_DATA_SEND_WAIT_MS`` wait duration after send of data by UART port.
 
 prj.conf
 ========
@@ -49,11 +46,34 @@ The application configuration file consists of the following parts:
    * General kernel configuration that sets the stacks and heap.
    * General Bluetooth configuration that enables scanning for incoming advertising.
    * UART configuration that enables driver and setup interrupts.
-   * Direction finding configuration that enables: the direction finding subsystem, reception of CTE, regular sampling settings.
+   * Direction finding configuration that enables: 
+	* CONFIG_BT_CTLR_DF_SUBSYSTEM enables Direction Finding Bluetooth subsystem
+	* CONFIG_BT_CTLR_DFE_RX enables receive of CTE(DFE) extension by Bluetooth stack
+	* CONFIG_BT_CTLR_DFE_NUMBER_OF_8US sets duration of CTE
+	* CONFIG_BT_CTLR_DFE_SWITCH_SPACING_2US set antenna switching time to 2us (other values are possible)
+	* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_1US set 1us for samples spacing when antenna switching started
+	* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_1US set 1us for samples spacing in reference period
 
-To enable oversampling one may use following configuarion of sampling:
+Other possible configurations for sample spacing:
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_4US
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_2US
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_1US
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_500NS
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_250NS
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_125NS
+
+Other possbile configurations for reference samples spacing:
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_4US
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_2US
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_1US
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_500NS
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_250NS
+* CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_125NS
+
+To enable oversampling one may use following configuarion entries:
 CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_250NS=y
 CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_250NS=y
+
 
 Bluetooth initialization
 ========================
@@ -394,3 +414,76 @@ Bluetooth 5.1 specification states that samples should be taken 125 ns after the
 To set sampling spacing, use the :cpp:func:`dfe_set_sample_offset` function.
 
 The radio is configured in :cpp:func:`dfe_init()`.
+
+
+UART settings
+-------------
+	* Baud rate 115200
+	* Data bits 8
+	* Stop bits 1
+	* Parity  None
+	* Flow Control Off
+
+UART application protocol
+-------------------------
+
+There is a protocol used for transmission of data over UART. Below is a fragment of complete data frame but representing every field it may include.
+
+DF_BEGIN
+IQ:0,0,11,114,137
+IQ:1,2,11,156,84
+.
+.
+.
+IQ:142,292,255,39,161
+IQ:143,294,255,99,151
+SW:2
+RR:5
+SS:5
+FR:2402
+ME:0
+MA:0
+KE:0
+KA:0
+DF_END
+
+Each data frame begins with DF_BEGIN and ends with DF_END strings.
+If one didn't receive DF_BEGIN then data frame is not complete. The same goes if there is no DF_END.
+
+After DF_BEGIN there is a block of strings that begin of IQ samples. Number of IQ samples provided depends on DFE configuration (duration, reference sample spacing, sample spacing). In the example, there were 144 samples provided. Each row represents single IQ sample. 
+Format is following e.g.: IQ:143,294,255,99,151
+	* “IQ:” mandatory begin of IQ sample data.
+	* “143” is a sample number (indexed from 0).
+	* "294” is time as number of 125ns units. The sample was taken 294*125ns=40750ns after beginning of reference period.
+	* “255” is an antenna index. This field may have a value in range 1 to 12. It is a antenna index. In case there is value 255, the sample was taken in antenna switching period and should be discarded from further evaluation.
+	* “99” is a Q component value.
+	* “151” is an I component value.
+
+After IQ samples block there is configuration and angles block:
+	* “SW:2” is an antenna switching time constant. "SW:" is mandatory beginnig of the record. Following number is a constant representing configuration used. It may have on of following values:
+		* RADIO_DFECTRL1_TSWITCHSPACING_4us (1UL)
+		* RADIO_DFECTRL1_TSWITCHSPACING_2us (2UL)
+		* RADIO_DFECTRL1_TSWITCHSPACING_1us (3UL)
+	* “RR:5” is a spacing of samples in reference period. "RR:" is mandatory beginnig of the record. Following number is a constant representing configuration used. It may have one of following values:
+		* RADIO_DFECTRL1_TSAMPLESPACINGREF_4us (1UL)
+		* RADIO_DFECTRL1_TSAMPLESPACINGREF_2us (2UL)
+		* RADIO_DFECTRL1_TSAMPLESPACINGREF_1us (3UL)
+		* RADIO_DFECTRL1_TSAMPLESPACINGREF_500ns (4UL)
+		* RADIO_DFECTRL1_TSAMPLESPACINGREF_250ns (5UL)
+		* RADIO_DFECTRL1_TSAMPLESPACINGREF_125ns (6UL)
+	* “SS:5” is a spacing of samples during antenna swiching period. "SS:" is mandatory beginnig of the record. Following number is a constant representing configuration used. It may have on of following values:
+		* RADIO_DFECTRL1_TSAMPLESPACING_4us (1UL)
+		* RADIO_DFECTRL1_TSAMPLESPACING_2us (2UL)
+		* RADIO_DFECTRL1_TSAMPLESPACING_1us (3UL)
+		* RADIO_DFECTRL1_TSAMPLESPACING_500ns (4UL)
+		* RADIO_DFECTRL1_TSAMPLESPACING_250ns (5UL)
+		* RADIO_DFECTRL1_TSAMPLESPACING_125ns (6UL)
+	* "FR:2402"  is a frequency that was used to collect IQ samples. "FR:" is mandatory beginnig of the record. Following number is a frequency value in MHz.
+	* “ME:0” this entry if reserved for future use
+	* “MA:0” this entry if reserved for future use
+	* “KE:0” this entry if reserved for future use
+	* “KA:0” this entry if reserved for future use
+
+DFE data frame ends with “DFE_END” string.
+
+
