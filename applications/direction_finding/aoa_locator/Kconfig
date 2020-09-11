@@ -19,6 +19,23 @@ config AOA_LOCATOR_DATA_SEND_WAIT_MS
 		It is here because of the PC tool limitations,
 		to give it a time for data processing before sending next packet.
 
+config AOA_LOCATOR_PDDA_COARSE_STEP
+	int "Step in degrees during coarse step of PDDA correlation"
+	default 14
+	range 1 30
+	help
+		The step in degrees in first PDDA correlation.
+		First step is responsible for rough estimation of the angle.
+
+config AOA_LOCATOR_PDDA_FINE_STEP
+	int "Step in degrees during fine step of PDDA correlation"
+	default 3
+	range 0 30
+	help
+		The step in degrees in second PDDA correlation.
+		Second step is responsible for fine estimation of the angle.
+		If set to 0, no fine step is executed.
+
 endmenu
 
 menu "Zephyr Kernel"

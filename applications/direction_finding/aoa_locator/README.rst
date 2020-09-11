@@ -37,6 +37,8 @@ The application provides the following custom configuration options:
 
 	* ``AOA_LOCATOR_UART_PORT`` defines the name of the UART port use to forward IQ samples.
 	* ``AOA_LOCATOR_DATA_SEND_WAIT_MS`` wait duration after send of data by UART port.
+	* ``AOA_LOCATOR_PDDA_COARSE_STEP`` the coarse step when algorithm searches rough angle.
+	* ``AOA_LOCATOR_PDDA_FINE_STEP``   the fine step when angle processed.
 
 prj.conf
 ========
@@ -70,10 +72,23 @@ Other possbile configurations for reference samples spacing:
 * CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_250NS
 * CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_125NS
 
-To enable oversampling one may use following configuarion entries:
+To enable oversampling one may use following configuration entries:
 CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_250NS=y
 CONFIG_BT_CTLR_DFE_SAMPLE_SPACING_REF_250NS=y
 
+There is a possibility to change default angles steps for PDDA algorithm.
+We have to steps used to process the data: coarse and fine.
+The default values are 14 degrees for coarse and 3 degrees in fine step.
+The settings provide results with moderate complexity.
+PDDA algorithm is scalable between accuracy and computational complexity.
+Giving smaller angle steps should increase accuracy but would increase
+the required processing time.
+In theory most accurate results should be achievable by use of 1 degree for step
+in coarse step and 0 in fine step (fine step disabled).
+
+To change default angle steps modify following configuration entries:
+* AOA_LOCATOR_PDDA_COARSE_STEP
+* AOA_LOCATOR_PDDA_FINE_STEP
 
 Bluetooth initialization
 ========================

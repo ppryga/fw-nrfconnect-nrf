@@ -145,6 +145,8 @@ void main(void)
 		.slot_samples_num = dfe_get_sampling_slot_samples_num(sampl_conf),
 		.frequency = AOA_FREQUENCY,
 		.array_distance = AOA_DISTANCE,
+		.pdda_coarse_step = CONFIG_AOA_LOCATOR_PDDA_COARSE_STEP,
+		.pdda_fine_step   = CONFIG_AOA_LOCATOR_PDDA_FINE_STEP
 	};
 
 	if (!aoa_initialize(&sys_iface, &aoa_config, &handle)) {
