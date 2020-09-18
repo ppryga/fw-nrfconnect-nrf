@@ -1,0 +1,6 @@
+tests:
+  # section.subsection
+  aoa_locator_test.ztest:
+    build_only: true
+    platform_whitelist: qemu_cortex_m3
+    tags: aoa_locator_test
