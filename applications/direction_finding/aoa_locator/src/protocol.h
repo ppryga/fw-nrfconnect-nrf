@@ -18,7 +18,7 @@
 #define PROTOCOL_HEAD				"+AoA"
 /** @brief Length of a string buffer used to send data via UART
  */
-#define PROTOCOL_STRING_BUFFER_SIZE		10240
+#define PROTOCOL_STRING_BUFFER_SIZE		20240
 
 /** @brief UARD data transmission structure
  */

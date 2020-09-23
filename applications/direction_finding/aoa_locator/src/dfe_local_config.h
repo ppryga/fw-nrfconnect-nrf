@@ -15,8 +15,8 @@
 #define DFE_NS(ns)	(ns)
 #define DFE_US(us)	(us)
 
-/** Macro for unknown antenna index */
-#define DFE_ANT_UNKNONW (255)
+/** Macro for incorrect antenna index */
+#define DFE_ANT_INCORRECT (0xFF)
 
 /** @brief DFE antennas switching configuration structure
  */
@@ -78,26 +78,21 @@ struct dfe_sampling_config
 	u8_t ref_period_us;
 };
 
-/** @brief Storage for IQ samples collected during CTE sampling
+/** @brief DFE sampling type.
  *
- * Size of a storage is based on settings provided by application configuration
- * (@ref DFE_TOTAL_SLOTS_NUM, @ref DFE_SAMPLES_PER_SLOT_NUM).
+ * Sampling of received CTE may be configured to produce:
+ * - regular sampling, when antenna switch spacing is equal to samples spacing
+ * - over sampling, when antenna switch spacing is longer than samples spacing
+ * - under sampling, when antenna switch spacing is shorter than samples spacing
+ *
+ * @note This applies for samples taken in antenna switching period of CTE receive.
  */
-struct dfe_iq_data_storage {
-	uint8_t slots_num;					//!< number of slots
-	uint8_t samples_num;				//!< number of samples in a single slot
-	union dfe_iq_f data[DFE_TOTAL_SLOTS_NUM][DFE_SAMPLES_PER_SLOT_NUM];
+enum dfe_sampling_type {
+	DFE_REGULAR_SAMPLING = 0,
+	DFE_OVER_SAMPLING,
+	DFE_UNDER_SAMPLING
 };
 
-/** @brief Storage for slots data holding IQ samples
- *
- *  * Size of a storage is based on settings provided by application configuration
- * (@ref DFE_TOTAL_SLOTS_NUM).
- */
-struct dfe_slot_samples_storage {
-	uint8_t slots_num;					//!< number of slots holding IQ samples
-	struct dfe_samples data[DFE_TOTAL_SLOTS_NUM];
-};
 
 /** @brief Returns instance of DFE sampling configuration data structure.
  *
@@ -107,7 +102,7 @@ const struct dfe_sampling_config *dfe_get_sampling_config();
 
 /** @brief Returns instance of DFE sampling configuration data structure.
  *
- * @return instance of antenna swtiching configuration
+ * @return instance of antenna switching configuration
  */
 const struct dfe_antenna_config *dfe_get_antenna_config();
 
@@ -138,43 +133,16 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 	     const struct dfe_antenna_config *ant_conf,
 	     const struct dfe_ant_gpio *ant_gpio, u8_t ant_gpio_len);
 
-
-/** @brief Maps IQ samples to antennas.
+/** @brief Provide information about sampling type.
  *
- * Maps IQ samples to antennas used to collect particular samples.
- * Radio provides raw IQ samples without information about time and antenna
- * used to collect them.
+ * Function provides information about type of a sampling that is
+ * configured for DFE. To check possible sampling types see @ref dfe_sampling_type.
  *
- * @note To decrease memory footprint the application is responsible to provide
- * storage for IQ samples and collect them into sets for every sampling slot
- * The library receives only pointers to data and mapping information.
+ * @param[in] sampling_conf	Sampling configuration
  *
- * @param[out] mapped_data		Storage for mapped data for PDDA evaluation
- * @param[out] iq_storage		Storage for IQ samples
- * @param[out] slots_storage	Storage for sampling slots data
- * @param[in] raw_data		Raw IQ samples received from BLE controller
- * @param[in] sampl_conf	Sampling configuration
- * @param[in] ant_conf		Antenna switching configuration
+ * @return dfe_sampling_type Configured type of a sampling
  */
-void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
-									struct dfe_iq_data_storage *iq_storage,
-									struct dfe_slot_samples_storage *slots_storage,
-									const struct dfe_packet *raw_data,
-									const struct dfe_sampling_config *sampling_conf,
-									const struct dfe_antenna_config *ant_config);
-
-/** @brief Removes samples collected in antenna switch slots
- *
- * If samples spacing is shorter than antenna switch spacing then part of samples
- * are collected during antenna switching slots. That samples may be invalid
- * and introduce error. Because of that they are removed from mapped samples set
- * before following steps of evaluation.
- *
- * @param[out]	data		Storage for mapped IQ samples
- * @param[in]	sampl_conf	Sampling configuration
- */
-int remove_samples_from_switch_slot(struct dfe_mapped_packet *data,
-				    const struct dfe_sampling_config *sampling_conf);
+enum dfe_sampling_type dfe_get_sampling_type(const struct dfe_sampling_config *sampling_conf);
 
 /** @brief Evaluates delay between last reference sample and first sample in
  * antenna switching period.
@@ -217,13 +185,20 @@ u16_t dfe_get_switch_spacing_ns(u8_t spacing);
  */
 u16_t dfe_get_sampling_slot_samples_num(const struct dfe_sampling_config *sampling_conf);
 
-/** @brief Provides number of effective antennas used during antenna switching
- * period.
+/** @brief Provides effective number of slots during antenna switching period.
  *
  * @param[in] sampl_conf	Sampling configuration
  *
- * @return Number of antennas used to collect IQ samples except reference period
+ * @return Number of slots used to collect IQ samples except reference period
  */
-uint8_t dfe_get_effective_ant_num(const struct dfe_sampling_config *sampling_conf);
+uint16_t dfe_get_effective_slots_num(const struct dfe_sampling_config *sampling_conf);
+
+/** @brief Evaluates number of samples collected in reference period
+ *
+ * @param[in] sampling_conf	Sampling configuration
+ *
+ * @return Number of samples
+ */
+u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf);
 
 #endif /* SRC_DFE_LOCAL_CONFIG_H_ */

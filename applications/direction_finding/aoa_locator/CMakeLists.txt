@@ -28,6 +28,7 @@ target_sources(app PRIVATE src/main.c
 	src/ble.c
 	src/float_ring_buffer.c
 	src/average_results.c
+	src/dfe_data_preprocess.c
 )
 
 #Include DF library

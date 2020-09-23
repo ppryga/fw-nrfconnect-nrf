@@ -70,28 +70,6 @@ static int create_switching_pattern_array(u8_t *array, u8_t len,
 static u32_t get_switching_duration_ns(const struct dfe_sampling_config *sampling_conf);
 
 
-/** @brief Evaluates number of samples collected in reference period
- *
- * @param[in] sampling_conf	Sampling configuration
- *
- * @return Number of samples
- */
-static u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf);
-
-
-/** @brief Converts antenna switch spacing settings value to nanoseconds.
- *
- * Function verifies if oversampling is enabled. That means we would receive
- * samples during antenna switching period.
- *
- * @param[in] sampling_conf	Sampling configuration
- *
- * @retval true		If oversampling is enables
- * @retval false	If oversampling is disabled
- */
-static inline bool is_oversampling_enabled(const struct dfe_sampling_config *sampling_conf);
-
-
 const struct dfe_sampling_config* dfe_get_sampling_config()
 {
 	return &g_sampl_config;
@@ -211,119 +189,6 @@ int dfe_init(const struct dfe_sampling_config *sampl_conf,
 	return 0;
 }
 
-void dfe_map_iq_samples_to_antennas(struct dfe_mapped_packet *mapped_data,
-									struct dfe_iq_data_storage *iq_storage,
-									struct dfe_slot_samples_storage *slots_storage,
-									const struct dfe_packet *raw_data,
-									const struct dfe_sampling_config *sampling_conf,
-									const struct dfe_antenna_config *ant_config)
-{
-	assert(raw_data != NULL);
-	assert(mapped_data != NULL);
-
-	u16_t ref_samples_num = get_ref_samples_num(sampling_conf);
-	mapped_data->ref_data.antenna_id = ant_config->ref_ant_idx;
-
-	for(uint16_t idx = 0; idx < ref_samples_num; ++idx) {
-		mapped_data->ref_data.data[idx].i = raw_data->data[idx].iq.i;
-		mapped_data->ref_data.data[idx].q = raw_data->data[idx].iq.q;
-	}
-	mapped_data->ref_data.samples_num = ref_samples_num;
-
-	/* Depending on DFE duration, the number of antennas used for sample
-	 * may be greater than the number of antennas in configuration.
-	 * If there is time left after end of antennas sequence, then radio
-	 * starts to use the same antennas again.
-	 */
-	u16_t effective_ant_num = dfe_get_effective_ant_num(sampling_conf);
-
-	u8_t samples_num = dfe_get_sampling_slot_samples_num(sampling_conf);
-
-	u8_t effective_sample_idx;
-
-	bool oversampl = is_oversampling_enabled(sampling_conf);
-
-	if (oversampl) {
-		effective_ant_num = (effective_ant_num*2);
-	}
-
-	for(u16_t ant_idx = 0; ant_idx < effective_ant_num; ++ant_idx) {
-		u8_t ant;
-		struct dfe_samples *sample = &slots_storage->data[ant_idx];
-
-		if (oversampl) {
-			if (ant_idx & 0x1) {
-				ant = 255;
-			} else {
-				u8_t idx = (ant_idx >> 1) % ant_config->antennae_switch_idx_len;
-				ant = ant_config->antennae_switch_idx[idx];
-			}
-		} else {
-			u8_t idx = ant_idx % ant_config->antennae_switch_idx_len;
-			ant = ant_config->antennae_switch_idx[idx];
-		}
-
-		sample->antenna_id = ant;
-		union dfe_iq_f *iq_data = iq_storage->data[ant_idx];
-
-		for(u8_t sample_idx = 0; sample_idx < samples_num; ++sample_idx) {
-			effective_sample_idx = ref_samples_num + (ant_idx * samples_num) + sample_idx;
-			iq_data[sample_idx].i = raw_data->data[effective_sample_idx].iq.i;
-			iq_data[sample_idx].q = raw_data->data[effective_sample_idx].iq.q;
-		}
-		sample->samples_num = samples_num;
-		sample->data = iq_data;
-	}
-
-	mapped_data->header.length = effective_ant_num;
-	mapped_data->header.frequency = raw_data->hdr.frequency;
-	mapped_data->sampl_data = slots_storage->data;
-}
-
-int remove_samples_from_switch_slot(struct dfe_mapped_packet *data,
-				    const struct dfe_sampling_config *sampling_conf)
-{
-	assert(data != NULL);
-	assert(sampling_conf != NULL);
-
-	u16_t effective_ant_num = dfe_get_effective_ant_num(sampling_conf);
-
-	if (effective_ant_num <= 0) {
-		return -1;
-	}
-
-	/* update length to new effective antenna number */
-	data->header.length = effective_ant_num;
-
-	bool oversampl = is_oversampling_enabled(sampling_conf);
-
-	if (oversampl) {
-		effective_ant_num = (effective_ant_num*2);
-	}
-
-	u16_t out_idx = 0;
-	u16_t in_idx = 0;
-
-	for( ; in_idx < effective_ant_num; ++in_idx) {
-		assert(in_idx >= out_idx);
-		const struct dfe_samples *sample_in = &data->sampl_data[in_idx];
-
-		if (sample_in->antenna_id != DFE_ANT_UNKNONW) {
-			struct dfe_samples *sample_out = &data->sampl_data[out_idx];
-
-			sample_out->antenna_id = sample_in->antenna_id;
-			sample_out->samples_num = sample_in->samples_num;
-
-			for(u8_t sample_idx = 0; sample_idx <= sample_in->samples_num; ++sample_idx) {
-				sample_out->data[sample_idx].i = sample_in->data[sample_idx].i;
-				sample_out->data[sample_idx].q = sample_in->data[sample_idx].q;
-			}
-			++out_idx;
-		}
-	}
-	return 0;
-}
-
 static int create_switching_pattern_array(u8_t *array, u8_t len,
 					  const u8_t *gpio_patterns,
 					  u8_t gpio_patterns_len,
@@ -359,14 +224,34 @@ static u32_t get_switching_duration_ns(const struct dfe_sampling_config *samplin
 	return (swiching_duration_us * DFE_NS(1000));
 }
 
-uint8_t dfe_get_effective_ant_num(const struct dfe_sampling_config *sampling_conf)
+uint16_t dfe_get_effective_slots_num(const struct dfe_sampling_config *sampling_conf)
 {
 	assert(sampling_conf != NULL);
 
 	u32_t switching_duration_ns = get_switching_duration_ns(sampling_conf);
 	u32_t switch_spacing_ns = dfe_get_switch_spacing_ns(sampling_conf->switch_spacing);
 
-	return (uint8_t)(switching_duration_ns / switch_spacing_ns);
+	u16_t effective_slots_num = (switching_duration_ns / switch_spacing_ns);
+	enum dfe_sampling_type sampling_type = dfe_get_sampling_type(sampling_conf);
+
+	switch(sampling_type)
+	{
+		case DFE_OVER_SAMPLING:
+			effective_slots_num = (effective_slots_num*2);
+			break;
+		case DFE_UNDER_SAMPLING:
+		{
+			u8_t ant_num_divider = dfe_get_sample_spacing_ns(sampling_conf->sample_spacing) /
+							       dfe_get_switch_spacing_ns(sampling_conf->switch_spacing);
+			effective_slots_num = (effective_slots_num / ant_num_divider);
+			break;
+		}
+		case DFE_REGULAR_SAMPLING:
+		default:
+			break;
+	}
+
+	return effective_slots_num;
 }
 
 u16_t dfe_get_switch_spacing_ns(u8_t spacing)
@@ -468,7 +353,7 @@ u16_t dfe_get_sampling_slot_samples_num(const struct dfe_sampling_config *sampli
 	}
 }
 
-static u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf)
+u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf)
 {
 	assert(sampling_conf != NULL);
 
@@ -476,7 +361,7 @@ static u16_t get_ref_samples_num(const struct dfe_sampling_config* sampling_conf
 	return sampling_conf->ref_period_us * DFE_NS(1000) / sample_spacing_ns;
 }
 
-static inline bool is_oversampling_enabled(const struct dfe_sampling_config *sampling_conf)
+enum dfe_sampling_type dfe_get_sampling_type(const struct dfe_sampling_config *sampling_conf)
 {
 	assert(sampling_conf != NULL);
 
@@ -488,9 +373,11 @@ static inline bool is_oversampling_enabled(const struct dfe_sampling_config *sam
 	 * Because of that logic here is opposite.
 	 */
 	if (sampling_conf->switch_spacing > sampling_conf->sample_spacing) {
-		return false;
+		return DFE_UNDER_SAMPLING;
+	} else if (sampling_conf->switch_spacing == sampling_conf->sample_spacing) {
+		return DFE_REGULAR_SAMPLING;
 	} else {
-		return true;
+		return DFE_OVER_SAMPLING;
 	}
 }
 
@@ -504,3 +391,4 @@ u16_t dfe_delay_before_first_sampl(const struct dfe_sampling_config* sampling_co
 	assert(swich_spacing_ns != 0);
 	return (swich_spacing_ns >> 1) + ref_spacing_ns;
 }
+
