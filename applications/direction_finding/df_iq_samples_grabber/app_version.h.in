@@ -1,0 +1,17 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+ */
+
+#ifndef _APP_VERSION_H_
+#define _APP_VERSION_H_
+
+/* @templates@ values come from cmake/version.cmake */
+
+#define APPLICATION_VERSION_MAJOR   @APP_VERSION_MAJOR@
+#define APPLICATION_VERSION_MINOR   @APP_VERSION_MINOR@
+#define APPLICATION_PATCHLEVEL      @APP_PATCHLEVEL@
+#define APPLICATION_VERSION_STRING  @APP_VERSION_STRING@
+
+#endif /* _APP_VERSION_H_ */
