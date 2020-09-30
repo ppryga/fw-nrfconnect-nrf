@@ -254,6 +254,34 @@ uint16_t dfe_get_effective_slots_num(const struct dfe_sampling_config *sampling_
 	return effective_slots_num;
 }
 
+uint16_t dfe_get_sampling_slots_num(const struct dfe_sampling_config *sampling_conf)
+{
+	assert(sampling_conf != NULL);
+
+	u32_t switching_duration_ns = get_switching_duration_ns(sampling_conf);
+	u32_t switch_spacing_ns = dfe_get_switch_spacing_ns(sampling_conf->switch_spacing);
+
+	u16_t effective_slots_num = (switching_duration_ns / switch_spacing_ns);
+	enum dfe_sampling_type sampling_type = dfe_get_sampling_type(sampling_conf);
+
+	switch(sampling_type)
+	{
+		case DFE_UNDER_SAMPLING:
+		{
+			u8_t ant_num_divider = dfe_get_sample_spacing_ns(sampling_conf->sample_spacing) /
+							       dfe_get_switch_spacing_ns(sampling_conf->switch_spacing);
+			effective_slots_num = (effective_slots_num / ant_num_divider);
+			break;
+		}
+		case DFE_OVER_SAMPLING:
+		case DFE_REGULAR_SAMPLING:
+		default:
+			break;
+	}
+
+	return effective_slots_num;
+}
+
 u16_t dfe_get_switch_spacing_ns(u8_t spacing)
 {
 	u16_t spacing_ns = 0;

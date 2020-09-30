@@ -138,7 +138,7 @@ void main(void)
 	struct aoa_configuration aoa_config = {
 		.matrix_size = AOA_MATRIX_SIZE,
 		//.antennas_num = ant_config->antennae_switch_idx_len,
-		.sampling_slots_num = dfe_get_effective_slots_num(sampl_conf),
+		.sampling_slots_num = dfe_get_sampling_slots_num(sampl_conf),
 		.reference_period = sampl_conf->ref_period_us,
 		.ant_switch_spacing = dfe_get_switch_spacing_ns(sampl_conf->switch_spacing) / DFE_NS(1000),
 		.sample_spacing_ref = dfe_get_sample_spacing_ref_ns(sampl_conf->sample_spacing_ref),

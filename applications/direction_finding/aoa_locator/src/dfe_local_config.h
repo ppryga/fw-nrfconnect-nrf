@@ -187,11 +187,24 @@ u16_t dfe_get_sampling_slot_samples_num(const struct dfe_sampling_config *sampli
 
 /** @brief Provides effective number of slots during antenna switching period.
  *
+ * It includes valid sampling slots and slots when IQ samples are collected
+ * during antenna switching.
+ *
  * @param[in] sampl_conf	Sampling configuration
  *
  * @return Number of slots used to collect IQ samples except reference period
  */
 uint16_t dfe_get_effective_slots_num(const struct dfe_sampling_config *sampling_conf);
+
+/** @brief Provides number of valid sampling slots during antenna switching period.
+ *
+ * Number returned provides information about valid slots only.
+ *
+ * @param[in] sampl_conf	Sampling configuration
+ *
+ * @return Number of slots used to collect IQ samples except reference period
+ */
+uint16_t dfe_get_sampling_slots_num(const struct dfe_sampling_config *sampling_conf);
 
 /** @brief Evaluates number of samples collected in reference period
  *

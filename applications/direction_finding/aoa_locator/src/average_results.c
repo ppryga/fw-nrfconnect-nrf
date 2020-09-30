@@ -95,8 +95,6 @@ int average_results(const struct aoa_results *results, struct aoa_results* avera
 	ring_buffer_push(&azimuth_buffer, &angle);
 	size_t len = ring_buffer_len(&azimuth_buffer);
 
-	float angle_rad;
-
 	average->raw_result.azimuth = complex_to_angle(g_azimuth_sum);
 
 	oldest_data.real = 0.0;
