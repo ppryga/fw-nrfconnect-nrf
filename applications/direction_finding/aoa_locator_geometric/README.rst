@@ -20,7 +20,6 @@ Requirements
 A Nordic board with Bluetooth LE 5.1 support:
 
    * nRF52833 Development Kit board (PCA10100)
-   * nRF52811 Development Kit board (PCA10068)
 
 Building and running
 ********************

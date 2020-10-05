@@ -1,7 +1,7 @@
-.. _bluetooth-aoa-beacon-connectionless-cte:
+.. _bluetooth-aoa-beacon:
 
-Bluetooth: AoA beacon with connectionless CTE
-#############################################
+Bluetooth: AoA beacon
+#####################
 
 The Angle of Arrival (AoA) beacon with connectionless Constant Tone Extension (CTE) sample provides a reference implementation of an AoA beacon.
 
@@ -78,7 +78,6 @@ To set the appropriate mode, use the :cpp:func:`dfe_set_mode` function.
 
 To be able to transmit CTE, you must set its length, which is provided to ``DFECTRL1.NUMBEROF8US``.
 A valid range of the number of 8 us is 2-20.
-Currently, due to a known issue, the max value is 10 (the issue is under investigation).
 To set CTE length, use the :cpp:func:`dfe_set_duration` function.
 The radio is configured in :cpp:func:`dfe_init()` function.
 

@@ -142,7 +142,6 @@ DFE Duration
 ~~~~~~~~~~~~
 To be able to transmit CTE, you must set its length, which is provided to ``DFECTRL1.NUMBEROF8US``.
 A valid range of the number of 8 us is 2-20.
-Currently, due to a known issue, the max value is 10 (the issue is under investigation).
 To set CTE length, use the :cpp:func:`dfe_set_duration` function.
 
 CTE start point
@@ -432,6 +431,8 @@ The radio is configured in :cpp:func:`dfe_init()`.
 
 Coordinate system
 =================
+
+.. parse-literal::
 									|
 									|
 	[positive values ox X]  		|
@@ -458,32 +459,34 @@ Z axis is directed to the viewer when see antenna patches on the antenna matrix.
 Azimut angle is an angle created by XY axis. Angle marked on diagram above is 90 degrees.
 Below is a diagram representing azimuth angle returned by angles evaluation algorithm.
 
-													0 degrees
-													  |
-													  |
-						   			+--------+--------+--------+--------+
-									| Ant 11 | ANT 12 | ANT 1  | ANT 2  |
-									+--------+--------+--------+--------+
-									| Ant 10 |                 | ANT 3  |
-				90 degrees ---------+--------+                 +--------+-------- 270 degrees
-									| Ant 8  |                 | ANT 4  |
-									+--------+--------+--------+--------+
-									| Ant 8  | ANT 7  | ANT 6  | ANT 5  |
-						 			+--------+--------+--------+--------+
-													  |
-													  |
-													180 degrees
+.. parse-literal::
+										0 degrees
+											|
+											|
+						+--------+--------+--------+--------+
+						| Ant 11 | ANT 12 | ANT 1  | ANT 2  |
+						+--------+--------+--------+--------+
+						| Ant 10 |                 | ANT 3  |
+	90 degrees ---------+--------+                 +--------+-------- 270 degrees
+						| Ant 8  |                 | ANT 4  |
+						+--------+--------+--------+--------+
+						| Ant 8  | ANT 7  | ANT 6  | ANT 5  |
+						+--------+--------+--------+--------+
+											|
+											|
+										180 degrees
 
- [positive values of Z]   Z |
-							|
-							| [elevation]
-							|----/
-							|   /
-							|  /
-							| /
-							|/											Top
-							(0,0)=============================================== Antenna board surface
-												[Dev kit mount]			Bottom
+.. parse-literal::
+	[positive values of Z]   Z |
+								|
+								| [elevation]
+								|----/
+								|   /
+								|  /
+								| /
+								|/											Top
+								(0,0)=============================================== Antenna board surface
+													[Dev kit mount]			Bottom
 
 Elevation angle is measured from Z axist to board surface.
 0 degrees is directly obove antenna board surface.

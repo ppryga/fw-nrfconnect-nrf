@@ -1,15 +1,16 @@
-.. _bluetooth-aoa-Locator-conectionless-cte:
+.. _bluetooth-df-iq-samples-grabber:
 
-Bluetooth: AoA locator with connectionless CTE
-##############################################
+Bluetooth: DF iq samples grabber
+################################
 
-The Angle of Arrival (AoA) locator with connectionless Constant Tone Extension (CTE) sample provides a reference implementation of an AoA locator.
+The DF IQ samples grabber sample provides a reference implementation of an application that provides access
+to IQ samples collected during receive of Constant Tone Extension.
 
 Overview
 ********
 
-The locator application uses Constant Tone Extension (CTE) added to regular advertising packets to gather IQ samples.
-The samples are forwarded to UART output.
+The df IQ samples grabber application uses Constant Tone Extension (CTE) added to regular advertising packets to gather IQ samples.
+It collects IQ samples and send them by UART output to connected device.
 The application does not allow to establish a connection.
 The application uses fixed MAC address to get IQ samples only from a particular beacon.
 
@@ -46,7 +47,7 @@ The application configuration file consists of the following parts:
    * General kernel configuration that sets the stacks and heap.
    * General Bluetooth configuration that enables scanning for incoming advertising.
    * UART configuration that enables driver and setup interrupts.
-   * Direction finding configuration that enables: 
+   * Direction finding configuration that enables:
 	* CONFIG_BT_CTLR_DF_SUBSYSTEM enables Direction Finding Bluetooth subsystem
 	* CONFIG_BT_CTLR_DFE_RX enables receive of CTE(DFE) extension by Bluetooth stack
 	* CONFIG_BT_CTLR_DFE_NUMBER_OF_8US sets duration of CTE
@@ -127,7 +128,6 @@ DFE Duration
 ~~~~~~~~~~~~
 To be able to transmit CTE, you must set its length, which is provided to ``DFECTRL1.NUMBEROF8US``.
 A valid range of the number of 8 us is 2-20.
-Currently, due to a known issue, the max value is 10 (the issue is under investigation).
 To set CTE length, use the :cpp:func:`dfe_set_duration` function.
 
 CTE start point
@@ -450,7 +450,7 @@ DF_END
 Each data frame begins with DF_BEGIN and ends with DF_END strings.
 If one didn't receive DF_BEGIN then data frame is not complete. The same goes if there is no DF_END.
 
-After DF_BEGIN there is a block of strings that begin of IQ samples. Number of IQ samples provided depends on DFE configuration (duration, reference sample spacing, sample spacing). In the example, there were 144 samples provided. Each row represents single IQ sample. 
+After DF_BEGIN there is a block of strings that begin of IQ samples. Number of IQ samples provided depends on DFE configuration (duration, reference sample spacing, sample spacing). In the example, there were 144 samples provided. Each row represents single IQ sample.
 Format is following e.g.: IQ:143,294,255,99,151
 	* “IQ:” mandatory begin of IQ sample data.
 	* “143” is a sample number (indexed from 0).

@@ -1,9 +1,9 @@
-.. _bluetooth-nrf-ant-tester:
+.. _bluetooth-df-ant-tester:
 
-Direction Finding: nRF antenna tester
+Direction Finding: antenna tester
 #####################################
 
-The nRF Antenna Tester sample provides a reference implementation of an antenna functionality tester.
+The DF Antenna Tester sample provides a reference implementation of an antenna functionality tester.
 
 Overview
 ********
