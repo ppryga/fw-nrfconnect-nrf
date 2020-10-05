@@ -48,7 +48,7 @@ The application configuration file consists of the following parts:
    * General kernel configuration that sets the stacks and heap.
    * General Bluetooth configuration that enables scanning for incoming advertising.
    * UART configuration that enables driver and setup interrupts.
-   * Direction finding configuration that enables: 
+   * Direction finding configuration that enables:
 	* CONFIG_BT_CTLR_DF_SUBSYSTEM enables Direction Finding Bluetooth subsystem
 	* CONFIG_BT_CTLR_DFE_RX enables receive of CTE(DFE) extension by Bluetooth stack
 	* CONFIG_BT_CTLR_DFE_NUMBER_OF_8US sets duration of CTE
@@ -430,9 +430,66 @@ To set sampling spacing, use the :cpp:func:`dfe_set_sample_offset` function.
 
 The radio is configured in :cpp:func:`dfe_init()`.
 
+Coordinate system
+=================
+									|
+									|
+	[positive values ox X]  		|
+							+-------|
+							|		|
+    [nefative valuses of Y] |	 XY |		[positive valuses of Y]	   Y
+    --------------------------------+-----------------------------------------
+						   			|+--------+--------+--------+--------+
+									|| Ant 11 | ANT 12 | ANT 1  | ANT 2  |
+									|+--------+--------+--------+--------+
+									|| Ant 10 |                 | ANT 3  |
+			[negative values of X] X|+--------+                 +--------+
+									|| Ant 8  |                 | ANT 4  |
+									|+--------+--------+--------+--------+
+									|| Ant 8  | ANT 7  | ANT 6  | ANT 5  |
+						 			|+--------+--------+--------+--------+
 
 
-UART Output 
+Coordinate system origin is at corner of ANT 11 (0,0).
+X axis is directed upwards above the row of ANT 11-2.
+Y axis is directed to the left of the column of ANT 11-8.
+Z axis is directed to the viewer when see antenna patches on the antenna matrix.
+
+Azimut angle is an angle created by XY axis. Angle marked on diagram above is 90 degrees.
+Below is a diagram representing azimuth angle returned by angles evaluation algorithm.
+
+													0 degrees
+													  |
+													  |
+						   			+--------+--------+--------+--------+
+									| Ant 11 | ANT 12 | ANT 1  | ANT 2  |
+									+--------+--------+--------+--------+
+									| Ant 10 |                 | ANT 3  |
+				90 degrees ---------+--------+                 +--------+-------- 270 degrees
+									| Ant 8  |                 | ANT 4  |
+									+--------+--------+--------+--------+
+									| Ant 8  | ANT 7  | ANT 6  | ANT 5  |
+						 			+--------+--------+--------+--------+
+													  |
+													  |
+													180 degrees
+
+ [positive values of Z]   Z |
+							|
+							| [elevation]
+							|----/
+							|   /
+							|  /
+							| /
+							|/											Top
+							(0,0)=============================================== Antenna board surface
+												[Dev kit mount]			Bottom
+
+Elevation angle is measured from Z axist to board surface.
+0 degrees is directly obove antenna board surface.
+90 degrees is on the level of antenna board.
+
+UART Output
 ===========
 
 Sample software uses UART port as console output.
@@ -473,7 +530,7 @@ DF_END
 Each data frame begins with DF_BEGIN and ends with DF_END strings.
 If one didn't receive DF_BEGIN then data frame is not complete. The same goes if there is no DF_END.
 
-After DF_BEGIN there is a block of strings that begin of IQ samples. Number of IQ samples provided depends on DFE configuration (duration, reference sample spacing, sample spacing). In the example, there were 144 samples provided. Each row represents single IQ sample. 
+After DF_BEGIN there is a block of strings that begin of IQ samples. Number of IQ samples provided depends on DFE configuration (duration, reference sample spacing, sample spacing). In the example, there were 144 samples provided. Each row represents single IQ sample.
 Format is following e.g.: IQ:143,294,255,99,151
 	* “IQ:” mandatory begin of IQ sample data.
 	* “143” is a sample number (indexed from 0).
@@ -505,7 +562,7 @@ After IQ samples block there is configuration and angles block:
 	* “ME:89” is a measured elevation angle. "ME:" is mandatory beginnig of the entry. Following nubmer is an angle value. It is an immediate value evaluated with use of IQ samples provided with DFE data frame.
 	* “MA:310” is a measured azimuth angle. "ME:" is mandatory beginnig of the entry. Following nubmer is an angle value. It is an immediate value evaluated with use of IQ samples provided with DFE data frame.
 	* “KE:89” is a filtered elevation angle. "KE:" is mandatory beginnig of the entry. Following nubmer is a filtered angle value. This value is influenced by past immediate angle values. Kind of filtering used depends on firmware implementation.
-	* “KA:308” is a filtered azimuth angle. "KE:" is mandatory beginnig of the entry. Following nubmer is a filtered angle value. This value is influenced by past immediate angle values. Kind of filtering used depends on firmware implementation. 
+	* “KA:308” is a filtered azimuth angle. "KE:" is mandatory beginnig of the entry. Following nubmer is a filtered angle value. This value is influenced by past immediate angle values. Kind of filtering used depends on firmware implementation.
 
 DFE data frame ends with “DFE_END” string.
 
