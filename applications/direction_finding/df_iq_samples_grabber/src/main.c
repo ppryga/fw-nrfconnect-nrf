@@ -40,7 +40,7 @@ extern struct k_msgq df_packet_msgq;
  */
 void main(void)
 {
-	printk("Starting AoA Locator CL!\r\n");
+	printk("Starting IQ samples grabber!\r\n");
 	/* initialize UART interface to provide I/Q samples */
 	struct if_data* iface = if_initialization();
 

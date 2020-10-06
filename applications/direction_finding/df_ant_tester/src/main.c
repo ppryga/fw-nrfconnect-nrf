@@ -76,7 +76,7 @@ SHELL_CMD_ARG_REGISTER(test, NULL, "Start antennas test. Optionally accepts " \
  */
 void main(void)
 {
-	LOG_INF("Starting AoA Locator CL!");
+	LOG_INF("Starting DF antenna tester!");
 	/* initialize UART interface to provide I/Q samples */
 	struct if_data* iface = if_initialization();
 

@@ -93,7 +93,7 @@ static struct dfe_slot_samples_storage slots_storage = {
  */
 void main(void)
 {
-	printk("Starting AoA Locator CL!\r\n");
+	printk("Starting AoA Locator!\r\n");
 	/* initialize UART interface to provide I/Q samples */
 	struct if_data* iface = if_initialization();
 
